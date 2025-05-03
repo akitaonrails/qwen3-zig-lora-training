@@ -1,4 +1,5 @@
 #!/bin/env python3
+import unsloth # seems like it needs to load before anyone
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import LoraConfig, get_peft_model
@@ -26,9 +27,10 @@ tokenizer = AutoTokenizer.from_pretrained(model_name,
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     torch_dtype=torch.bfloat16, # Can try float16 if you face issues
-    device_map="auto",
+    #device_map="auto", 
     trust_remote_code=True
 )
+model = model.to("cuda")
 
 # Setup LoRA config
 lora_config = LoraConfig(
