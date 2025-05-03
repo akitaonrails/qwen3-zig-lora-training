@@ -1,0 +1,6705 @@
+Reference Filename: test_pointer_coerce_const_optional.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+const mem = std.mem;
+
+test "cast *[1][*:0]const u8 to []const ?[*:0]const u8" {
+    const window_name = [1][*:0]const u8{"window name"};
+    const x: []const ?[*:0]const u8 = &window_name;
+    try expect(mem.eql(u8, mem.span(x[0].?), "window name"));
+}
+
+// test```
+
+
+Reference Filename: test_vector.zig
+
+```zigconst std = @import("std");
+const expectEqual = std.testing.expectEqual;
+
+test "Basic vector usage" {
+    // Vectors have a compile-time known length and base type.
+    const a = @Vector(4, i32){ 1, 2, 3, 4 };
+    const b = @Vector(4, i32){ 5, 6, 7, 8 };
+
+    // Math operations take place element-wise.
+    const c = a + b;
+
+    // Individual vector elements can be accessed using array indexing syntax.
+    try expectEqual(6, c[0]);
+    try expectEqual(8, c[1]);
+    try expectEqual(10, c[2]);
+    try expectEqual(12, c[3]);
+}
+
+test "Conversion between vectors, arrays, and slices" {
+    // Vectors and fixed-length arrays can be automatically assigned back and forth
+    const arr1: [4]f32 = [_]f32{ 1.1, 3.2, 4.5, 5.6 };
+    const vec: @Vector(4, f32) = arr1;
+    const arr2: [4]f32 = vec;
+    try expectEqual(arr1, arr2);
+
+    // You can also assign from a slice with comptime-known length to a vector using .*
+    const vec2: @Vector(2, f32) = arr1[1..3].*;
+
+    const slice: []const f32 = &arr1;
+    var offset: u32 = 1; // var to make it runtime-known
+    _ = &offset; // suppress 'var is never mutated' error
+    // To extract a comptime-known length from a runtime-known offset,
+    // first extract a new slice from the starting offset, then an array of
+    // comptime-known length
+    const vec3: @Vector(2, f32) = slice[offset..][0..2].*;
+    try expectEqual(slice[offset], vec2[0]);
+    try expectEqual(slice[offset + 1], vec2[1]);
+    try expectEqual(vec2, vec3);
+}
+
+// test```
+
+
+Reference Filename: test_expression_ignored.zig
+
+```zigtest "ignoring expression value" {
+    foo();
+}
+
+fn foo() i32 {
+    return 1234;
+}
+
+// test_error=ignored```
+
+
+Reference Filename: runtime_invalid_cast_truncate.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    var spartan_count: u16 = 300; // runtime-known
+    _ = &spartan_count;
+    const byte: u8 = @intCast(spartan_count);
+    std.debug.print("value: {}\n", .{byte});
+}
+
+// exe=fail```
+
+
+Reference Filename: test_comptime_max_with_bool.zig
+
+```zigfn max(comptime T: type, a: T, b: T) T {
+    if (T == bool) {
+        return a or b;
+    } else if (a > b) {
+        return a;
+    } else {
+        return b;
+    }
+}
+test "try to compare bools" {
+    try @import("std").testing.expect(max(bool, false, true) == true);
+}
+
+// test```
+
+
+Reference Filename: test_variable_alignment.zig
+
+```zigconst std = @import("std");
+const builtin = @import("builtin");
+const expect = std.testing.expect;
+
+test "variable alignment" {
+    var x: i32 = 1234;
+    const align_of_i32 = @alignOf(@TypeOf(x));
+    try expect(@TypeOf(&x) == *i32);
+    try expect(*i32 == *align(align_of_i32) i32);
+    if (builtin.target.cpu.arch == .x86_64) {
+        try expect(@typeInfo(*i32).pointer.alignment == 4);
+    }
+}
+
+// test```
+
+
+Reference Filename: test_packed_struct_equality.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "packed struct equality" {
+    const S = packed struct {
+        a: u4,
+        b: u4,
+    };
+    const x: S = .{ .a = 1, .b = 2 };
+    const y: S = .{ .b = 2, .a = 1 };
+    try expect(x == y);
+}
+
+// test```
+
+
+Reference Filename: Assembly Syntax Explained.zig
+
+```zigpub fn syscall1(number: usize, arg1: usize) usize {
+    // Inline assembly is an expression which returns a value.
+    // the `asm` keyword begins the expression.
+    return asm
+    // `volatile` is an optional modifier that tells Zig this
+    // inline assembly expression has side-effects. Without
+    // `volatile`, Zig is allowed to delete the inline assembly
+    // code if the result is unused.
+    volatile (
+    // Next is a comptime string which is the assembly code.
+    // Inside this string one may use `%[ret]`, `%[number]`,
+    // or `%[arg1]` where a register is expected, to specify
+    // the register that Zig uses for the argument or return value,
+    // if the register constraint strings are used. However in
+    // the below code, this is not used. A literal `%` can be
+    // obtained by escaping it with a double percent: `%%`.
+    // Often multiline string syntax comes in handy here.
+        \\syscall
+        // Next is the output. It is possible in the future Zig will
+        // support multiple outputs, depending on how
+        // https://github.com/ziglang/zig/issues/215 is resolved.
+        // It is allowed for there to be no outputs, in which case
+        // this colon would be directly followed by the colon for the inputs.
+        :
+        // This specifies the name to be used in `%[ret]` syntax in
+        // the above assembly string. This example does not use it,
+        // but the syntax is mandatory.
+          [ret]
+          // Next is the output constraint string. This feature is still
+          // considered unstable in Zig, and so LLVM/GCC documentation
+          // must be used to understand the semantics.
+          // http://releases.llvm.org/10.0.0/docs/LangRef.html#inline-asm-constraint-string
+          // https://gcc.gnu.org/onlinedocs/gcc/Extended-Asm.html
+          // In this example, the constraint string means "the result value of
+          // this inline assembly instruction is whatever is in $rax".
+          "={rax}"
+          // Next is either a value binding, or `->` and then a type. The
+          // type is the result type of the inline assembly expression.
+          // If it is a value binding, then `%[ret]` syntax would be used
+          // to refer to the register bound to the value.
+          (-> usize),
+          // Next is the list of inputs.
+          // The constraint for these inputs means, "when the assembly code is
+          // executed, $rax shall have the value of `number` and $rdi shall have
+          // the value of `arg1`". Any number of input parameters is allowed,
+          // including none.
+        : [number] "{rax}" (number),
+          [arg1] "{rdi}" (arg1),
+          // Next is the list of clobbers. These declare a set of registers whose
+          // values will not be preserved by the execution of this assembly code.
+          // These do not include output or input registers. The special clobber
+          // value of "memory" means that the assembly writes to arbitrary undeclared
+          // memory locations - not only the memory pointed to by a declared indirect
+          // output. In this example we list $rcx and $r11 because it is known the
+          // kernel syscall does not preserve these registers.
+        : "rcx", "r11"
+    );
+}
+
+// syntax```
+
+
+Reference Filename: test_defining_variadic_function.zig
+
+```zigconst std = @import("std");
+const testing = std.testing;
+const builtin = @import("builtin");
+
+fn add(count: c_int, ...) callconv(.c) c_int {
+    var ap = @cVaStart();
+    defer @cVaEnd(&ap);
+    var i: usize = 0;
+    var sum: c_int = 0;
+    while (i < count) : (i += 1) {
+        sum += @cVaArg(&ap, c_int);
+    }
+    return sum;
+}
+
+test "defining a variadic function" {
+    if (builtin.cpu.arch == .aarch64 and builtin.os.tag != .macos) {
+        // https://github.com/ziglang/zig/issues/14096
+        return error.SkipZigTest;
+    }
+    if (builtin.cpu.arch == .x86_64 and builtin.os.tag == .windows) {
+        // https://github.com/ziglang/zig/issues/16961
+        return error.SkipZigTest;
+    }
+
+    try std.testing.expectEqual(@as(c_int, 0), add(0));
+    try std.testing.expectEqual(@as(c_int, 1), add(1, @as(c_int, 1)));
+    try std.testing.expectEqual(@as(c_int, 3), add(2, @as(c_int, 1), @as(c_int, 2)));
+}
+
+// test```
+
+
+Reference Filename: try.zig
+
+```zigconst parseU64 = @import("error_union_parsing_u64.zig").parseU64;
+
+fn doAThing(str: []u8) !void {
+    const number = try parseU64(str, 10);
+    _ = number; // ...
+}
+
+// syntax```
+
+
+Reference Filename: test_inline_while.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "inline while loop" {
+    comptime var i = 0;
+    var sum: usize = 0;
+    inline while (i < 3) : (i += 1) {
+        const T = switch (i) {
+            0 => f32,
+            1 => i8,
+            2 => bool,
+            else => unreachable,
+        };
+        sum += typeNameLength(T);
+    }
+    try expect(sum == 9);
+}
+
+fn typeNameLength(comptime T: type) usize {
+    return @typeName(T).len;
+}
+
+// test```
+
+
+Reference Filename: libc_export_entry_point.zig
+
+```zigpub export fn main(argc: c_int, argv: [*]const [*:0]const u8) c_int {
+    const args = argv[0..@intCast(argc)];
+    std.debug.print("Hello! argv[0] is '{s}'\n", .{args[0]});
+    return 0;
+}
+
+const std = @import("std");
+
+// exe=succeed
+// link_libc```
+
+
+Reference Filename: redundant_fqn.zig
+
+```zigconst std = @import("std");
+
+pub const json = struct {
+    pub const JsonValue = union(enum) {
+        number: f64,
+        boolean: bool,
+        // ...
+    };
+};
+
+pub fn main() void {
+    std.debug.print("{s}\n", .{@typeName(json.JsonValue)});
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_wrong_union_access.zig
+
+```zigconst Payload = union {
+    int: i64,
+    float: f64,
+    boolean: bool,
+};
+test "simple union" {
+    var payload = Payload{ .int = 1234 };
+    payload.float = 12.34;
+}
+
+// test_error=access of union field 'float' while field 'int' is active```
+
+
+Reference Filename: test_call_builtin.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "noinline function call" {
+    try expect(@call(.auto, add, .{ 3, 9 }) == 12);
+}
+
+fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+// test```
+
+
+Reference Filename: test_comptime_mismatched_type.zig
+
+```zigfn max(comptime T: type, a: T, b: T) T {
+    return if (a > b) a else b;
+}
+test "try to compare bools" {
+    _ = max(bool, true, false);
+}
+
+// test_error=operator > not allowed for type 'bool'```
+
+
+Reference Filename: entry_point.zig
+
+```zig/// `std.start` imports this file using `@import("root")`, and uses this declaration as the program's
+/// user-provided entry point. It can return any of the following types:
+/// * `void`
+/// * `E!void`, for any error set `E`
+/// * `u8`
+/// * `E!u8`, for any error set `E`
+/// Returning a `void` value from this function will exit with code 0.
+/// Returning a `u8` value from this function will exit with the given status code.
+/// Returning an error value from this function will print an Error Return Trace and exit with code 1.
+pub fn main() void {
+    std.debug.print("Hello, World!\n", .{});
+}
+
+// If uncommented, this declaration would suppress the usual std.start logic, causing
+// the `main` declaration above to be ignored.
+//pub const _start = {};
+
+const std = @import("std");
+
+// exe=succeed```
+
+
+Reference Filename: test_comptime_index_out_of_bounds.zig
+
+```zigcomptime {
+    const array: [5]u8 = "hello".*;
+    const garbage = array[5];
+    _ = garbage;
+}
+
+// test_error=index 5 outside array of length 5```
+
+
+Reference Filename: test_anonymous_union.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const Number = union {
+    int: i32,
+    float: f64,
+};
+
+test "anonymous union literal syntax" {
+    const i: Number = .{ .int = 42 };
+    const f = makeNumber();
+    try expect(i.int == 42);
+    try expect(f.float == 12.34);
+}
+
+fn makeNumber() Number {
+    return .{ .float = 12.34 };
+}
+
+// test```
+
+
+Reference Filename: test_pointer_to_non-byte_aligned_field.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const BitField = packed struct {
+    a: u3,
+    b: u3,
+    c: u2,
+};
+
+var foo = BitField{
+    .a = 1,
+    .b = 2,
+    .c = 3,
+};
+
+test "pointer to non-byte-aligned field" {
+    const ptr = &foo.b;
+    try expect(ptr.* == 2);
+}
+
+// test```
+
+
+Reference Filename: test_tuples.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "tuple" {
+    const values = .{
+        @as(u32, 1234),
+        @as(f64, 12.34),
+        true,
+        "hi",
+    } ++ .{false} ** 2;
+    try expect(values[0] == 1234);
+    try expect(values[4] == false);
+    inline for (values, 0..) |v, i| {
+        if (i != 2) continue;
+        try expect(v);
+    }
+    try expect(values.len == 6);
+    try expect(values.@"3"[0] == 'h');
+}
+
+// test```
+
+
+Reference Filename: test_slices.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+const mem = std.mem;
+const fmt = std.fmt;
+
+test "using slices for strings" {
+    // Zig has no concept of strings. String literals are const pointers
+    // to null-terminated arrays of u8, and by convention parameters
+    // that are "strings" are expected to be UTF-8 encoded slices of u8.
+    // Here we coerce *const [5:0]u8 and *const [6:0]u8 to []const u8
+    const hello: []const u8 = "hello";
+    const world: []const u8 = "世界";
+
+    var all_together: [100]u8 = undefined;
+    // You can use slice syntax with at least one runtime-known index on an
+    // array to convert an array into a slice.
+    var start: usize = 0;
+    _ = &start;
+    const all_together_slice = all_together[start..];
+    // String concatenation example.
+    const hello_world = try fmt.bufPrint(all_together_slice, "{s} {s}", .{ hello, world });
+
+    // Generally, you can use UTF-8 and not worry about whether something is a
+    // string. If you don't need to deal with individual characters, no need
+    // to decode.
+    try expect(mem.eql(u8, hello_world, "hello 世界"));
+}
+
+test "slice pointer" {
+    var array: [10]u8 = undefined;
+    const ptr = &array;
+    try expect(@TypeOf(ptr) == *[10]u8);
+
+    // A pointer to an array can be sliced just like an array:
+    var start: usize = 0;
+    var end: usize = 5;
+    _ = .{ &start, &end };
+    const slice = ptr[start..end];
+    // The slice is mutable because we sliced a mutable pointer.
+    try expect(@TypeOf(slice) == []u8);
+    slice[2] = 3;
+    try expect(array[2] == 3);
+
+    // Again, slicing with comptime-known indexes will produce another pointer
+    // to an array:
+    const ptr2 = slice[2..3];
+    try expect(ptr2.len == 1);
+    try expect(ptr2[0] == 3);
+    try expect(@TypeOf(ptr2) == *[1]u8);
+}
+
+// test```
+
+
+Reference Filename: test_comptime_call_extern_function.zig
+
+```zigextern fn exit() noreturn;
+
+test "foo" {
+    comptime {
+        exit();
+    }
+}
+
+// test_error=comptime call of extern function```
+
+
+Reference Filename: single_value_error_set_shortcut.zig
+
+```zigconst err = error.FileNotFound;
+
+// syntax```
+
+
+Reference Filename: comments.zig
+
+```zigconst print = @import("std").debug.print;
+
+pub fn main() void {
+    // Comments in Zig start with "//" and end at the next LF byte (end of line).
+    // The line below is a comment and won't be executed.
+
+    //print("Hello?", .{});
+
+    print("Hello, world!\n", .{}); // another comment
+}
+
+// exe=succeed```
+
+
+Reference Filename: checking_null_in_zig.zig
+
+```zigconst Foo = struct {};
+fn doSomethingWithFoo(foo: *Foo) void {
+    _ = foo;
+}
+
+fn doAThing(optional_foo: ?*Foo) void {
+    // do some stuff
+
+    if (optional_foo) |foo| {
+        doSomethingWithFoo(foo);
+    }
+
+    // do some stuff
+}
+
+// syntax```
+
+
+Reference Filename: test_null_terminated_slicing.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "0-terminated slicing" {
+    var array = [_]u8{ 3, 2, 1, 0, 3, 2, 1, 0 };
+    var runtime_length: usize = 3;
+    _ = &runtime_length;
+    const slice = array[0..runtime_length :0];
+
+    try expect(@TypeOf(slice) == [:0]u8);
+    try expect(slice.len == 3);
+}
+
+// test```
+
+
+Reference Filename: destructuring_vectors.zig
+
+```zigconst print = @import("std").debug.print;
+
+// emulate punpckldq
+pub fn unpack(x: @Vector(4, f32), y: @Vector(4, f32)) @Vector(4, f32) {
+    const a, const c, _, _ = x;
+    const b, const d, _, _ = y;
+    return .{ a, b, c, d };
+}
+
+pub fn main() void {
+    const x: @Vector(4, f32) = .{ 1.0, 2.0, 3.0, 4.0 };
+    const y: @Vector(4, f32) = .{ 5.0, 6.0, 7.0, 8.0 };
+    print("{}", .{unpack(x, y)});
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_comptime_unwrap_null.zig
+
+```zigcomptime {
+    const optional_number: ?i32 = null;
+    const number = optional_number.?;
+    _ = number;
+}
+
+// test_error=unable to unwrap null```
+
+
+Reference Filename: mathtest.zig
+
+```zigexport fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+// syntax```
+
+
+Reference Filename: test_tagged_union.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const ComplexTypeTag = enum {
+    ok,
+    not_ok,
+};
+const ComplexType = union(ComplexTypeTag) {
+    ok: u8,
+    not_ok: void,
+};
+
+test "switch on tagged union" {
+    const c = ComplexType{ .ok = 42 };
+    try expect(@as(ComplexTypeTag, c) == ComplexTypeTag.ok);
+
+    switch (c) {
+        .ok => |value| try expect(value == 42),
+        .not_ok => unreachable,
+    }
+}
+
+test "get tag type" {
+    try expect(std.meta.Tag(ComplexType) == ComplexTypeTag);
+}
+
+// test```
+
+
+Reference Filename: test_comptime_evaluation.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+const CmdFn = struct {
+    name: []const u8,
+    func: fn (i32) i32,
+};
+
+const cmd_fns = [_]CmdFn{
+    CmdFn{ .name = "one", .func = one },
+    CmdFn{ .name = "two", .func = two },
+    CmdFn{ .name = "three", .func = three },
+};
+fn one(value: i32) i32 {
+    return value + 1;
+}
+fn two(value: i32) i32 {
+    return value + 2;
+}
+fn three(value: i32) i32 {
+    return value + 3;
+}
+
+fn performFn(comptime prefix_char: u8, start_value: i32) i32 {
+    var result: i32 = start_value;
+    comptime var i = 0;
+    inline while (i < cmd_fns.len) : (i += 1) {
+        if (cmd_fns[i].name[0] == prefix_char) {
+            result = cmd_fns[i].func(result);
+        }
+    }
+    return result;
+}
+
+test "perform fn" {
+    try expect(performFn('t', 1) == 6);
+    try expect(performFn('o', 0) == 1);
+    try expect(performFn('w', 99) == 99);
+}
+
+// test```
+
+
+Reference Filename: test_arrays.zig
+
+```zigconst expect = @import("std").testing.expect;
+const assert = @import("std").debug.assert;
+const mem = @import("std").mem;
+
+// array literal
+const message = [_]u8{ 'h', 'e', 'l', 'l', 'o' };
+
+// alternative initialization using result location
+const alt_message: [5]u8 = .{ 'h', 'e', 'l', 'l', 'o' };
+
+comptime {
+    assert(mem.eql(u8, &message, &alt_message));
+}
+
+// get the size of an array
+comptime {
+    assert(message.len == 5);
+}
+
+// A string literal is a single-item pointer to an array.
+const same_message = "hello";
+
+comptime {
+    assert(mem.eql(u8, &message, same_message));
+}
+
+test "iterate over an array" {
+    var sum: usize = 0;
+    for (message) |byte| {
+        sum += byte;
+    }
+    try expect(sum == 'h' + 'e' + 'l' * 2 + 'o');
+}
+
+// modifiable array
+var some_integers: [100]i32 = undefined;
+
+test "modify an array" {
+    for (&some_integers, 0..) |*item, i| {
+        item.* = @intCast(i);
+    }
+    try expect(some_integers[10] == 10);
+    try expect(some_integers[99] == 99);
+}
+
+// array concatenation works if the values are known
+// at compile time
+const part_one = [_]i32{ 1, 2, 3, 4 };
+const part_two = [_]i32{ 5, 6, 7, 8 };
+const all_of_it = part_one ++ part_two;
+comptime {
+    assert(mem.eql(i32, &all_of_it, &[_]i32{ 1, 2, 3, 4, 5, 6, 7, 8 }));
+}
+
+// remember that string literals are arrays
+const hello = "hello";
+const world = "world";
+const hello_world = hello ++ " " ++ world;
+comptime {
+    assert(mem.eql(u8, hello_world, "hello world"));
+}
+
+// ** does repeating patterns
+const pattern = "ab" ** 3;
+comptime {
+    assert(mem.eql(u8, pattern, "ababab"));
+}
+
+// initialize an array to zero
+const all_zero = [_]u16{0} ** 10;
+
+comptime {
+    assert(all_zero.len == 10);
+    assert(all_zero[5] == 0);
+}
+
+// use compile-time code to initialize an array
+var fancy_array = init: {
+    var initial_value: [10]Point = undefined;
+    for (&initial_value, 0..) |*pt, i| {
+        pt.* = Point{
+            .x = @intCast(i),
+            .y = @intCast(i * 2),
+        };
+    }
+    break :init initial_value;
+};
+const Point = struct {
+    x: i32,
+    y: i32,
+};
+
+test "compile-time array initialization" {
+    try expect(fancy_array[4].x == 4);
+    try expect(fancy_array[4].y == 8);
+}
+
+// call a function to initialize an array
+var more_points = [_]Point{makePoint(3)} ** 10;
+fn makePoint(x: i32) Point {
+    return Point{
+        .x = x,
+        .y = x * 2,
+    };
+}
+test "array initialization with function calls" {
+    try expect(more_points[4].x == 3);
+    try expect(more_points[4].y == 6);
+    try expect(more_points.len == 10);
+}
+
+// test```
+
+
+Reference Filename: test_fn_type_inference.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+fn addFortyTwo(x: anytype) @TypeOf(x) {
+    return x + 42;
+}
+
+test "fn type inference" {
+    try expect(addFortyTwo(1) == 43);
+    try expect(@TypeOf(addFortyTwo(1)) == comptime_int);
+    const y: i64 = 2;
+    try expect(addFortyTwo(y) == 44);
+    try expect(@TypeOf(addFortyTwo(y)) == i64);
+}
+
+// test```
+
+
+Reference Filename: destructuring_mixed.zig
+
+```zigconst print = @import("std").debug.print;
+
+pub fn main() void {
+    var x: u32 = undefined;
+
+    const tuple = .{ 1, 2, 3 };
+
+    x, var y : u32, const z = tuple;
+
+    print("x = {}, y = {}, z = {}\n", .{x, y, z});
+
+    // y is mutable
+    y = 100;
+
+    // You can use _ to throw away unwanted values.
+    _, x, _ = tuple;
+
+    print("x = {}", .{x});
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_error_union.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "error union" {
+    var foo: anyerror!i32 = undefined;
+
+    // Coerce from child type of an error union:
+    foo = 1234;
+
+    // Coerce from an error set:
+    foo = error.SomeError;
+
+    // Use compile-time reflection to access the payload type of an error union:
+    try comptime expect(@typeInfo(@TypeOf(foo)).error_union.payload == i32);
+
+    // Use compile-time reflection to access the error set type of an error union:
+    try comptime expect(@typeInfo(@TypeOf(foo)).error_union.error_set == anyerror);
+}
+
+// test```
+
+
+Reference Filename: test_usingnamespace.zig
+
+```zigtest "using std namespace" {
+    const S = struct {
+        usingnamespace @import("std");
+    };
+    try S.testing.expect(true);
+}
+
+// test```
+
+
+Reference Filename: test_while_continue.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "while continue" {
+    var i: usize = 0;
+    while (true) {
+        i += 1;
+        if (i < 10)
+            continue;
+        break;
+    }
+    try expect(i == 10);
+}
+
+// test```
+
+
+Reference Filename: test_coerce_to_error_union.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "coercion to error unions" {
+    const x: anyerror!i32 = 1234;
+    const y: anyerror!i32 = error.Failure;
+
+    try expect((try x) == 1234);
+    try std.testing.expectError(error.Failure, y);
+}
+
+// test```
+
+
+Reference Filename: doc_comments.zig
+
+```zig/// A structure for storing a timestamp, with nanosecond precision (this is a
+/// multiline doc comment).
+const Timestamp = struct {
+    /// The number of seconds since the epoch (this is also a doc comment).
+    seconds: i64, // signed so we can represent pre-1970 (not a doc comment)
+    /// The number of nanoseconds past the second (doc comment again).
+    nanos: u32,
+
+    /// Returns a `Timestamp` struct representing the Unix epoch; that is, the
+    /// moment of 1970 Jan 1 00:00:00 UTC (this is a doc comment too).
+    pub fn unixEpoch() Timestamp {
+        return Timestamp{
+            .seconds = 0,
+            .nanos = 0,
+        };
+    }
+};
+
+// syntax```
+
+
+Reference Filename: test_coerce_optionals.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "coerce to optionals" {
+    const x: ?i32 = 1234;
+    const y: ?i32 = null;
+
+    try expect(x.? == 1234);
+    try expect(y == null);
+}
+
+// test```
+
+
+Reference Filename: test_single_item_pointer.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "address of syntax" {
+    // Get the address of a variable:
+    const x: i32 = 1234;
+    const x_ptr = &x;
+
+    // Dereference a pointer:
+    try expect(x_ptr.* == 1234);
+
+    // When you get the address of a const variable, you get a const single-item pointer.
+    try expect(@TypeOf(x_ptr) == *const i32);
+
+    // If you want to mutate the value, you'd need an address of a mutable variable:
+    var y: i32 = 5678;
+    const y_ptr = &y;
+    try expect(@TypeOf(y_ptr) == *i32);
+    y_ptr.* += 1;
+    try expect(y_ptr.* == 5679);
+}
+
+test "pointer array access" {
+    // Taking an address of an individual element gives a
+    // single-item pointer. This kind of pointer
+    // does not support pointer arithmetic.
+    var array = [_]u8{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+    const ptr = &array[2];
+    try expect(@TypeOf(ptr) == *u8);
+
+    try expect(array[2] == 3);
+    ptr.* += 1;
+    try expect(array[2] == 4);
+}
+
+test "slice syntax" {
+    // Get a pointer to a variable:
+    var x: i32 = 1234;
+    const x_ptr = &x;
+
+    // Convert to array pointer using slice syntax:
+    const x_array_ptr = x_ptr[0..1];
+    try expect(@TypeOf(x_array_ptr) == *[1]i32);
+
+    // Coerce to many-item pointer:
+    const x_many_ptr: [*]i32 = x_array_ptr;
+    try expect(x_many_ptr[0] == 1234);
+}
+
+// test```
+
+
+Reference Filename: fibonacci_comptime_infinite_recursion.zig
+
+```zigconst assert = @import("std").debug.assert;
+
+fn fibonacci(index: i32) i32 {
+    //if (index < 2) return index;
+    return fibonacci(index - 1) + fibonacci(index - 2);
+}
+
+test "fibonacci" {
+    try comptime assert(fibonacci(7) == 13);
+}
+
+// syntax```
+
+
+Reference Filename: test_comptime_remainder_division_by_zero.zig
+
+```zigcomptime {
+    const a: i32 = 10;
+    const b: i32 = 0;
+    const c = a % b;
+    _ = c;
+}
+
+// test_error=division by zero```
+
+
+Reference Filename: enum_export.zig
+
+```zigconst Foo = enum(c_int) { a, b, c };
+export fn entry(foo: Foo) void {
+    _ = foo;
+}
+
+// obj```
+
+
+Reference Filename: zero_bit_types.zig
+
+```zigexport fn entry() void {
+    var x: void = {};
+    var y: void = {};
+    x = y;
+    y = x;
+}
+
+// syntax```
+
+
+Reference Filename: unattached_doc-comment.zig
+
+```zigpub fn main() void {}
+
+/// End of file
+
+// obj=unattached documentation comment```
+
+
+Reference Filename: testing_failure.zig
+
+```zigconst std = @import("std");
+
+test "expect this to fail" {
+    try std.testing.expect(false);
+}
+
+test "expect this to succeed" {
+    try std.testing.expect(true);
+}
+
+// test_error=```
+
+
+Reference Filename: tldoc_comments.zig
+
+```zig//! This module provides functions for retrieving the current date and
+//! time with varying degrees of precision and accuracy. It does not
+//! depend on libc, but will use functions from it if available.
+
+const S = struct {
+    //! Top level comments are allowed inside a container other than a module,
+    //! but it is not very useful.  Currently, when producing the package
+    //! documentation, these comments are ignored.
+};
+
+// syntax```
+
+
+Reference Filename: test_structs.zig
+
+```zig// Declare a struct.
+// Zig gives no guarantees about the order of fields and the size of
+// the struct but the fields are guaranteed to be ABI-aligned.
+const Point = struct {
+    x: f32,
+    y: f32,
+};
+
+// Declare an instance of a struct.
+const p: Point = .{
+    .x = 0.12,
+    .y = 0.34,
+};
+
+// Functions in the struct's namespace can be called with dot syntax.
+const Vec3 = struct {
+    x: f32,
+    y: f32,
+    z: f32,
+
+    pub fn init(x: f32, y: f32, z: f32) Vec3 {
+        return Vec3{
+            .x = x,
+            .y = y,
+            .z = z,
+        };
+    }
+
+    pub fn dot(self: Vec3, other: Vec3) f32 {
+        return self.x * other.x + self.y * other.y + self.z * other.z;
+    }
+};
+
+test "dot product" {
+    const v1 = Vec3.init(1.0, 0.0, 0.0);
+    const v2 = Vec3.init(0.0, 1.0, 0.0);
+    try expect(v1.dot(v2) == 0.0);
+
+    // Other than being available to call with dot syntax, struct methods are
+    // not special. You can reference them as any other declaration inside
+    // the struct:
+    try expect(Vec3.dot(v1, v2) == 0.0);
+}
+
+// Structs can have declarations.
+// Structs can have 0 fields.
+const Empty = struct {
+    pub const PI = 3.14;
+};
+test "struct namespaced variable" {
+    try expect(Empty.PI == 3.14);
+    try expect(@sizeOf(Empty) == 0);
+
+    // Empty structs can be instantiated the same as usual.
+    const does_nothing: Empty = .{};
+
+    _ = does_nothing;
+}
+
+// Struct field order is determined by the compiler, however, a base pointer
+// can be computed from a field pointer:
+fn setYBasedOnX(x: *f32, y: f32) void {
+    const point: *Point = @fieldParentPtr("x", x);
+    point.y = y;
+}
+test "field parent pointer" {
+    var point = Point{
+        .x = 0.1234,
+        .y = 0.5678,
+    };
+    setYBasedOnX(&point.x, 0.9);
+    try expect(point.y == 0.9);
+}
+
+// Structs can be returned from functions.
+fn LinkedList(comptime T: type) type {
+    return struct {
+        pub const Node = struct {
+            prev: ?*Node,
+            next: ?*Node,
+            data: T,
+        };
+
+        first: ?*Node,
+        last: ?*Node,
+        len: usize,
+    };
+}
+
+test "linked list" {
+    // Functions called at compile-time are memoized.
+    try expect(LinkedList(i32) == LinkedList(i32));
+
+    const list = LinkedList(i32){
+        .first = null,
+        .last = null,
+        .len = 0,
+    };
+    try expect(list.len == 0);
+
+    // Since types are first class values you can instantiate the type
+    // by assigning it to a variable:
+    const ListOfInts = LinkedList(i32);
+    try expect(ListOfInts == LinkedList(i32));
+
+    var node = ListOfInts.Node{
+        .prev = null,
+        .next = null,
+        .data = 1234,
+    };
+    const list2 = LinkedList(i32){
+        .first = &node,
+        .last = &node,
+        .len = 1,
+    };
+
+    // When using a pointer to a struct, fields can be accessed directly,
+    // without explicitly dereferencing the pointer.
+    // So you can do
+    try expect(list2.first.?.data == 1234);
+    // instead of try expect(list2.first.?.*.data == 1234);
+}
+
+const expect = @import("std").testing.expect;
+
+// test```
+
+
+Reference Filename: single_value_error_set.zig
+
+```zigconst err = (error{FileNotFound}).FileNotFound;
+
+// syntax```
+
+
+Reference Filename: test_fibonacci_comptime_unreachable.zig
+
+```zigconst assert = @import("std").debug.assert;
+
+fn fibonacci(index: i32) i32 {
+    if (index < 2) return index;
+    return fibonacci(index - 1) + fibonacci(index - 2);
+}
+
+test "fibonacci" {
+    try comptime assert(fibonacci(7) == 99999);
+}
+
+// test_error=reached unreachable```
+
+
+Reference Filename: test_scopes.zig
+
+```zigtest "separate scopes" {
+    {
+        const pi = 3.14;
+        _ = pi;
+    }
+    {
+        var pi: bool = true;
+        _ = &pi;
+    }
+}
+
+// test```
+
+
+Reference Filename: compiler_generated_function.zig
+
+```zigfn max(a: bool, b: bool) bool {
+    {
+        return a or b;
+    }
+}
+
+// syntax```
+
+
+Reference Filename: runtime_incorrect_pointer_alignment.zig
+
+```zigconst mem = @import("std").mem;
+pub fn main() !void {
+    var array align(4) = [_]u32{ 0x11111111, 0x11111111 };
+    const bytes = mem.sliceAsBytes(array[0..]);
+    if (foo(bytes) != 0x11111111) return error.Wrong;
+}
+fn foo(bytes: []u8) u32 {
+    const slice4 = bytes[1..5];
+    const int_slice = mem.bytesAsSlice(u32, @as([]align(4) u8, @alignCast(slice4)));
+    return int_slice[0];
+}
+
+// exe=fail```
+
+
+Reference Filename: test_switch_non-exhaustive.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const Number = enum(u8) {
+    one,
+    two,
+    three,
+    _,
+};
+
+test "switch on non-exhaustive enum" {
+    const number = Number.one;
+    const result = switch (number) {
+        .one => true,
+        .two, .three => false,
+        _ => false,
+    };
+    try expect(result);
+    const is_one = switch (number) {
+        .one => true,
+        else => false,
+    };
+    try expect(is_one);
+}
+
+// test```
+
+
+Reference Filename: multiline_string_literals.zig
+
+```zigconst hello_world_in_c =
+    \\#include <stdio.h>
+    \\
+    \\int main(int argc, char **argv) {
+    \\    printf("hello world\n");
+    \\    return 0;
+    \\}
+;
+
+// syntax```
+
+
+Reference Filename: test_switch_continue_equivalent.zig
+
+```zigconst std = @import("std");
+
+test "switch continue, equivalent loop" {
+    var sw: i32 = 5;
+    while (true) {
+        switch (sw) {
+            5 => {
+                sw = 4;
+                continue;
+            },
+            2...4 => |v| {
+                if (v > 3) {
+                    sw = 2;
+                    continue;
+                } else if (v == 3) {
+                    break;
+                }
+
+                sw = 1;
+                continue;
+            },
+            1 => return,
+            else => unreachable,
+        }
+    }
+}
+
+// test```
+
+
+Reference Filename: hello.zig
+
+```zigconst std = @import("std");
+
+pub fn main() !void {
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("Hello, {s}!\n", .{"world"});
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_variadic_function.zig
+
+```zigconst std = @import("std");
+const testing = std.testing;
+
+pub extern "c" fn printf(format: [*:0]const u8, ...) c_int;
+
+test "variadic function" {
+    try testing.expect(printf("Hello, world!\n") == 14);
+    try testing.expect(@typeInfo(@TypeOf(printf)).@"fn".is_var_args);
+}
+
+// test
+// link_libc
+// verbose_cimport```
+
+
+Reference Filename: struct_default_value.zig
+
+```zigconst Threshold = struct {
+    minimum: f32,
+    maximum: f32,
+
+    const default: Threshold = .{
+        .minimum = 0.25,
+        .maximum = 0.75,
+    };
+};
+
+// syntax```
+
+
+Reference Filename: runtime_invalid_error_code.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    const err = error.AnError;
+    var number = @intFromError(err) + 500;
+    _ = &number;
+    const invalid_err = @errorFromInt(number);
+    std.debug.print("value: {}\n", .{invalid_err});
+}
+
+// exe=fail```
+
+
+Reference Filename: build_object.zig
+
+```zigconst std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const obj = b.addObject(.{
+        .name = "base64",
+        .root_source_file = b.path("base64.zig"),
+    });
+
+    const exe = b.addExecutable(.{
+        .name = "test",
+    });
+    exe.addCSourceFile(.{ .file = b.path("test.c"), .flags = &.{"-std=c99"} });
+    exe.addObject(obj);
+    exe.linkSystemLibrary("c");
+    b.installArtifact(exe);
+}
+
+// syntax```
+
+
+Reference Filename: test_comptime_invalid_null_pointer_cast.zig
+
+```zigcomptime {
+    const opt_ptr: ?*i32 = null;
+    const ptr: *i32 = @ptrCast(opt_ptr);
+    _ = ptr;
+}
+
+// test_error=null pointer casted to type```
+
+
+Reference Filename: test_assertion_failure.zig
+
+```zig// This is how std.debug.assert is implemented
+fn assert(ok: bool) void {
+    if (!ok) unreachable; // assertion failure
+}
+
+// This test will fail because we hit unreachable.
+test "this will fail" {
+    assert(false);
+}
+
+// test_error=```
+
+
+Reference Filename: test_comptime_variables.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "comptime vars" {
+    var x: i32 = 1;
+    comptime var y: i32 = 1;
+
+    x += 1;
+    y += 1;
+
+    try expect(x == 2);
+    try expect(y == 2);
+
+    if (y != 2) {
+        // This compile error never triggers because y is a comptime variable,
+        // and so `y != 2` is a comptime value, and this if is statically evaluated.
+        @compileError("wrong y value");
+    }
+}
+
+// test```
+
+
+Reference Filename: inline_assembly.zig
+
+```zigpub fn main() noreturn {
+    const msg = "hello world\n";
+    _ = syscall3(SYS_write, STDOUT_FILENO, @intFromPtr(msg), msg.len);
+    _ = syscall1(SYS_exit, 0);
+    unreachable;
+}
+
+pub const SYS_write = 1;
+pub const SYS_exit = 60;
+
+pub const STDOUT_FILENO = 1;
+
+pub fn syscall1(number: usize, arg1: usize) usize {
+    return asm volatile ("syscall"
+        : [ret] "={rax}" (-> usize),
+        : [number] "{rax}" (number),
+          [arg1] "{rdi}" (arg1),
+        : "rcx", "r11"
+    );
+}
+
+pub fn syscall3(number: usize, arg1: usize, arg2: usize, arg3: usize) usize {
+    return asm volatile ("syscall"
+        : [ret] "={rax}" (-> usize),
+        : [number] "{rax}" (number),
+          [arg1] "{rdi}" (arg1),
+          [arg2] "{rsi}" (arg2),
+          [arg3] "{rdx}" (arg3),
+        : "rcx", "r11"
+    );
+}
+
+// exe=succeed
+// target=x86_64-linux```
+
+
+Reference Filename: test_inline_for.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "inline for loop" {
+    const nums = [_]i32{ 2, 4, 6 };
+    var sum: usize = 0;
+    inline for (nums) |i| {
+        const T = switch (i) {
+            2 => f32,
+            4 => i8,
+            6 => bool,
+            else => unreachable,
+        };
+        sum += typeNameLength(T);
+    }
+    try expect(sum == 9);
+}
+
+fn typeNameLength(comptime T: type) usize {
+    return @typeName(T).len;
+}
+
+// test```
+
+
+Reference Filename: test_optional_type.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "optional type" {
+    // Declare an optional and coerce from null:
+    var foo: ?i32 = null;
+
+    // Coerce from child type of an optional
+    foo = 1234;
+
+    // Use compile-time reflection to access the child type of the optional:
+    try comptime expect(@typeInfo(@TypeOf(foo)).optional.child == i32);
+}
+
+// test```
+
+
+Reference Filename: test_fibonacci_comptime_overflow.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+fn fibonacci(index: u32) u32 {
+    //if (index < 2) return index;
+    return fibonacci(index - 1) + fibonacci(index - 2);
+}
+
+test "fibonacci" {
+    try comptime expect(fibonacci(7) == 13);
+}
+
+// test_error=overflow of integer type```
+
+
+Reference Filename: error_union_parsing_u64.zig
+
+```zigconst std = @import("std");
+const maxInt = std.math.maxInt;
+
+pub fn parseU64(buf: []const u8, radix: u8) !u64 {
+    var x: u64 = 0;
+
+    for (buf) |c| {
+        const digit = charToDigit(c);
+
+        if (digit >= radix) {
+            return error.InvalidChar;
+        }
+
+        // x *= radix
+        var ov = @mulWithOverflow(x, radix);
+        if (ov[1] != 0) return error.OverFlow;
+
+        // x += digit
+        ov = @addWithOverflow(ov[0], digit);
+        if (ov[1] != 0) return error.OverFlow;
+        x = ov[0];
+    }
+
+    return x;
+}
+
+fn charToDigit(c: u8) u8 {
+    return switch (c) {
+        '0'...'9' => c - '0',
+        'A'...'Z' => c - 'A' + 10,
+        'a'...'z' => c - 'a' + 10,
+        else => maxInt(u8),
+    };
+}
+
+test "parse u64" {
+    const result = try parseU64("1234", 10);
+    try std.testing.expect(result == 1234);
+}
+
+// test```
+
+
+Reference Filename: test_truncate_builtin.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "integer truncation" {
+    const a: u16 = 0xabcd;
+    const b: u8 = @truncate(a);
+    try expect(b == 0xcd);
+}
+
+// test```
+
+
+Reference Filename: compile-time_duck_typing.zig
+
+```zigfn max(comptime T: type, a: T, b: T) T {
+    return if (a > b) a else b;
+}
+fn gimmeTheBiggerFloat(a: f32, b: f32) f32 {
+    return max(f32, a, b);
+}
+fn gimmeTheBiggerInteger(a: u64, b: u64) u64 {
+    return max(u64, a, b);
+}
+
+// syntax```
+
+
+Reference Filename: export_builtin.zig
+
+```zigcomptime {
+    @export(&internalName, .{ .name = "foo", .linkage = .strong });
+}
+
+fn internalName() callconv(.c) void {}
+
+// obj```
+
+
+Reference Filename: test_comptime_out_of_bounds_float_to_integer_cast.zig
+
+```zigcomptime {
+    const float: f32 = 4294967296;
+    const int: i32 = @intFromFloat(float);
+    _ = int;
+}
+
+// test_error=float value '4294967296' cannot be stored in integer type 'i32'```
+
+
+Reference Filename: anonymous_struct_name.zig
+
+```zigconst Node = struct {
+    next: ?*Node,
+    name: []const u8,
+};
+
+var node_a = Node{
+    .next = null,
+    .name = "Node A",
+};
+
+var node_b = Node{
+    .next = &node_a,
+    .name = "Node B",
+};
+
+// syntax```
+
+
+Reference Filename: test_overaligned_packed_struct.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const S = packed struct {
+    a: u32,
+    b: u32,
+};
+test "overaligned pointer to packed struct" {
+    var foo: S align(4) = .{ .a = 1, .b = 2 };
+    const ptr: *align(4) S = &foo;
+    const ptr_to_b: *u32 = &ptr.b;
+    try expect(ptr_to_b.* == 2);
+}
+
+// test```
+
+
+Reference Filename: test_pass_by_reference_or_value.zig
+
+```zigconst Point = struct {
+    x: i32,
+    y: i32,
+};
+
+fn foo(point: Point) i32 {
+    // Here, `point` could be a reference, or a copy. The function body
+    // can ignore the difference and treat it as a value. Be very careful
+    // taking the address of the parameter - it should be treated as if
+    // the address will become invalid when the function returns.
+    return point.x + point.y;
+}
+
+const expect = @import("std").testing.expect;
+
+test "pass struct to function" {
+    try expect(foo(Point{ .x = 1, .y = 2 }) == 3);
+}
+
+// test```
+
+
+Reference Filename: test_opaque.zig
+
+```zigconst Derp = opaque {};
+const Wat = opaque {};
+
+extern fn bar(d: *Derp) void;
+fn foo(w: *Wat) callconv(.c) void {
+    bar(w);
+}
+
+test "call foo" {
+    foo(undefined);
+}
+
+// test_error=expected type '*test_opaque.Derp', found '*test_opaque.Wat'```
+
+
+Reference Filename: float_literals.zig
+
+```zigconst floating_point = 123.0E+77;
+const another_float = 123.0;
+const yet_another = 123.0e+77;
+
+const hex_floating_point = 0x103.70p-5;
+const another_hex_float = 0x103.70;
+const yet_another_hex_float = 0x103.70P-5;
+
+// underscores may be placed between two digits as a visual separator
+const lightspeed = 299_792_458.000_000;
+const nanosecond = 0.000_000_001;
+const more_hex = 0x1234_5678.9ABC_CDEFp-10;
+
+// syntax```
+
+
+Reference Filename: integer_literals.zig
+
+```zigconst decimal_int = 98222;
+const hex_int = 0xff;
+const another_hex_int = 0xFF;
+const octal_int = 0o755;
+const binary_int = 0b11110000;
+
+// underscores may be placed between two digits as a visual separator
+const one_billion = 1_000_000_000;
+const binary_mask = 0b1_1111_1111;
+const permissions = 0o7_5_5;
+const big_address = 0xFF80_0000_0000_0000;
+
+// syntax```
+
+
+Reference Filename: test_noreturn.zig
+
+```zigfn foo(condition: bool, b: u32) void {
+    const a = if (condition) b else return;
+    _ = a;
+    @panic("do something with a");
+}
+test "noreturn" {
+    foo(false, 1);
+}
+
+// test```
+
+
+Reference Filename: runtime_vs_comptime.zig
+
+```zigfn divide(a: i32, b: i32) i32 {
+    return a / b;
+}
+
+// syntax```
+
+
+Reference Filename: result_location_interfering_with_swap.zig
+
+```zigconst expect = @import("std").testing.expect;
+test "attempt to swap array elements with array initializer" {
+    var arr: [2]u32 = .{ 1, 2 };
+    arr = .{ arr[1], arr[0] };
+    // The previous line is equivalent to the following two lines:
+    //   arr[0] = arr[1];
+    //   arr[1] = arr[0];
+    // So this fails!
+    try expect(arr[0] == 2); // succeeds
+    try expect(arr[1] == 1); // fails
+}
+
+// test_error=```
+
+
+Reference Filename: test_while_else.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "while else" {
+    try expect(rangeHasNumber(0, 10, 5));
+    try expect(!rangeHasNumber(0, 10, 15));
+}
+
+fn rangeHasNumber(begin: usize, end: usize, number: usize) bool {
+    var i = begin;
+    return while (i < end) : (i += 1) {
+        if (i == number) {
+            break true;
+        }
+    } else false;
+}
+
+// test```
+
+
+Reference Filename: test_container-level_comptime_expressions.zig
+
+```zigconst first_25_primes = firstNPrimes(25);
+const sum_of_first_25_primes = sum(&first_25_primes);
+
+fn firstNPrimes(comptime n: usize) [n]i32 {
+    var prime_list: [n]i32 = undefined;
+    var next_index: usize = 0;
+    var test_number: i32 = 2;
+    while (next_index < prime_list.len) : (test_number += 1) {
+        var test_prime_index: usize = 0;
+        var is_prime = true;
+        while (test_prime_index < next_index) : (test_prime_index += 1) {
+            if (test_number % prime_list[test_prime_index] == 0) {
+                is_prime = false;
+                break;
+            }
+        }
+        if (is_prime) {
+            prime_list[next_index] = test_number;
+            next_index += 1;
+        }
+    }
+    return prime_list;
+}
+
+fn sum(numbers: []const i32) i32 {
+    var result: i32 = 0;
+    for (numbers) |x| {
+        result += x;
+    }
+    return result;
+}
+
+test "variable values" {
+    try @import("std").testing.expect(sum_of_first_25_primes == 1060);
+}
+
+// test```
+
+
+Reference Filename: test_void_ignored.zig
+
+```zigtest "void is ignored" {
+    returnsVoid();
+}
+
+test "explicitly ignoring expression value" {
+    _ = foo();
+}
+
+fn returnsVoid() void {}
+
+fn foo() i32 {
+    return 1234;
+}
+
+// test```
+
+
+Reference Filename: runtime_index_out_of_bounds.zig
+
+```zigpub fn main() void {
+    const x = foo("hello");
+    _ = x;
+}
+
+fn foo(x: []const u8) u8 {
+    return x[5];
+}
+
+// exe=fail```
+
+
+Reference Filename: bad_default_value.zig
+
+```zigconst Threshold = struct {
+    minimum: f32 = 0.25,
+    maximum: f32 = 0.75,
+
+    const Category = enum { low, medium, high };
+
+    fn categorize(t: Threshold, value: f32) Category {
+        assert(t.maximum >= t.minimum);
+        if (value < t.minimum) return .low;
+        if (value > t.maximum) return .high;
+        return .medium;
+    }
+};
+
+pub fn main() !void {
+    var threshold: Threshold = .{
+        .maximum = 0.20,
+    };
+    const category = threshold.categorize(0.90);
+    try std.io.getStdOut().writeAll(@tagName(category));
+}
+
+const std = @import("std");
+const assert = std.debug.assert;
+
+// exe=fail```
+
+
+Reference Filename: test_blocks.zig
+
+```zigtest "access variable after block scope" {
+    {
+        var x: i32 = 1;
+        _ = &x;
+    }
+    x += 1;
+}
+
+// test_error=use of undeclared identifier 'x'```
+
+
+Reference Filename: catch.zig
+
+```zigconst parseU64 = @import("error_union_parsing_u64.zig").parseU64;
+
+fn doAThing(str: []u8) void {
+    const number = parseU64(str, 10) catch 13;
+    _ = number; // ...
+}
+
+// syntax```
+
+
+Reference Filename: test_sentinel_mismatch.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "sentinel mismatch" {
+    var array = [_]u8{ 3, 2, 1, 0 };
+
+    // Creating a sentinel-terminated slice from the array with a length of 2
+    // will result in the value `1` occupying the sentinel element position.
+    // This does not match the indicated sentinel value of `0` and will lead
+    // to a runtime panic.
+    var runtime_length: usize = 2;
+    _ = &runtime_length;
+    const slice = array[0..runtime_length :0];
+
+    _ = slice;
+}
+
+// test_safety=sentinel mismatch```
+
+
+Reference Filename: test_ambiguous_coercion.zig
+
+```zig// Compile time coercion of float to int
+test "implicit cast to comptime_int" {
+    const f: f32 = 54.0 / 5;
+    _ = f;
+}
+
+// test_error=```
+
+
+Reference Filename: test_shadowing.zig
+
+```zigconst pi = 3.14;
+
+test "inside test block" {
+    // Let's even go inside another block
+    {
+        var pi: i32 = 1234;
+    }
+}
+
+// test_error=local variable shadows declaration```
+
+
+Reference Filename: test_noreturn_from_exit.zig
+
+```zigconst std = @import("std");
+const builtin = @import("builtin");
+const native_arch = builtin.cpu.arch;
+const expect = std.testing.expect;
+
+const WINAPI: std.builtin.CallingConvention = if (native_arch == .x86) .Stdcall else .C;
+extern "kernel32" fn ExitProcess(exit_code: c_uint) callconv(WINAPI) noreturn;
+
+test "foo" {
+    const value = bar() catch ExitProcess(1);
+    try expect(value == 1234);
+}
+
+fn bar() anyerror!u32 {
+    return 1234;
+}
+
+// test
+// target=x86_64-windows```
+
+
+Reference Filename: test_comptime_unwrap_error.zig
+
+```zigcomptime {
+    const number = getNumberOrFail() catch unreachable;
+    _ = number;
+}
+
+fn getNumberOrFail() !i32 {
+    return error.UnableToReturnNumber;
+}
+
+// test_error=caught unexpected error 'UnableToReturnNumber'```
+
+
+Reference Filename: test_peer_type_resolution.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+const mem = std.mem;
+
+test "peer resolve int widening" {
+    const a: i8 = 12;
+    const b: i16 = 34;
+    const c = a + b;
+    try expect(c == 46);
+    try expect(@TypeOf(c) == i16);
+}
+
+test "peer resolve arrays of different size to const slice" {
+    try expect(mem.eql(u8, boolToStr(true), "true"));
+    try expect(mem.eql(u8, boolToStr(false), "false"));
+    try comptime expect(mem.eql(u8, boolToStr(true), "true"));
+    try comptime expect(mem.eql(u8, boolToStr(false), "false"));
+}
+fn boolToStr(b: bool) []const u8 {
+    return if (b) "true" else "false";
+}
+
+test "peer resolve array and const slice" {
+    try testPeerResolveArrayConstSlice(true);
+    try comptime testPeerResolveArrayConstSlice(true);
+}
+fn testPeerResolveArrayConstSlice(b: bool) !void {
+    const value1 = if (b) "aoeu" else @as([]const u8, "zz");
+    const value2 = if (b) @as([]const u8, "zz") else "aoeu";
+    try expect(mem.eql(u8, value1, "aoeu"));
+    try expect(mem.eql(u8, value2, "zz"));
+}
+
+test "peer type resolution: ?T and T" {
+    try expect(peerTypeTAndOptionalT(true, false).? == 0);
+    try expect(peerTypeTAndOptionalT(false, false).? == 3);
+    comptime {
+        try expect(peerTypeTAndOptionalT(true, false).? == 0);
+        try expect(peerTypeTAndOptionalT(false, false).? == 3);
+    }
+}
+fn peerTypeTAndOptionalT(c: bool, b: bool) ?usize {
+    if (c) {
+        return if (b) null else @as(usize, 0);
+    }
+
+    return @as(usize, 3);
+}
+
+test "peer type resolution: *[0]u8 and []const u8" {
+    try expect(peerTypeEmptyArrayAndSlice(true, "hi").len == 0);
+    try expect(peerTypeEmptyArrayAndSlice(false, "hi").len == 1);
+    comptime {
+        try expect(peerTypeEmptyArrayAndSlice(true, "hi").len == 0);
+        try expect(peerTypeEmptyArrayAndSlice(false, "hi").len == 1);
+    }
+}
+fn peerTypeEmptyArrayAndSlice(a: bool, slice: []const u8) []const u8 {
+    if (a) {
+        return &[_]u8{};
+    }
+
+    return slice[0..1];
+}
+test "peer type resolution: *[0]u8, []const u8, and anyerror![]u8" {
+    {
+        var data = "hi".*;
+        const slice = data[0..];
+        try expect((try peerTypeEmptyArrayAndSliceAndError(true, slice)).len == 0);
+        try expect((try peerTypeEmptyArrayAndSliceAndError(false, slice)).len == 1);
+    }
+    comptime {
+        var data = "hi".*;
+        const slice = data[0..];
+        try expect((try peerTypeEmptyArrayAndSliceAndError(true, slice)).len == 0);
+        try expect((try peerTypeEmptyArrayAndSliceAndError(false, slice)).len == 1);
+    }
+}
+fn peerTypeEmptyArrayAndSliceAndError(a: bool, slice: []u8) anyerror![]u8 {
+    if (a) {
+        return &[_]u8{};
+    }
+
+    return slice[0..1];
+}
+
+test "peer type resolution: *const T and ?*T" {
+    const a: *const usize = @ptrFromInt(0x123456780);
+    const b: ?*usize = @ptrFromInt(0x123456780);
+    try expect(a == b);
+    try expect(b == a);
+}
+
+test "peer type resolution: error union switch" {
+    // The non-error and error cases are only peers if the error case is just a switch expression;
+    // the pattern `if (x) {...} else |err| blk: { switch (err) {...} }` does not consider the
+    // non-error and error case to be peers.
+    var a: error{ A, B, C }!u32 = 0;
+    _ = &a;
+    const b = if (a) |x|
+        x + 3
+    else |err| switch (err) {
+        error.A => 0,
+        error.B => 1,
+        error.C => null,
+    };
+    try expect(@TypeOf(b) == ?u32);
+
+    // The non-error and error cases are only peers if the error case is just a switch expression;
+    // the pattern `x catch |err| blk: { switch (err) {...} }` does not consider the unwrapped `x`
+    // and error case to be peers.
+    const c = a catch |err| switch (err) {
+        error.A => 0,
+        error.B => 1,
+        error.C => null,
+    };
+    try expect(@TypeOf(c) == ?u32);
+}
+
+// test```
+
+
+Reference Filename: test_comptime_invalid_enum_cast.zig
+
+```zigconst Foo = enum {
+    a,
+    b,
+    c,
+};
+comptime {
+    const a: u2 = 3;
+    const b: Foo = @enumFromInt(a);
+    _ = b;
+}
+
+// test_error=enum 'test_comptime_invalid_enum_cast.Foo' has no tag with value '3'```
+
+
+Reference Filename: change_active_union_field.zig
+
+```zigconst std = @import("std");
+
+const Foo = union {
+    float: f32,
+    int: u32,
+};
+
+pub fn main() void {
+    var f = Foo{ .int = 42 };
+    bar(&f);
+}
+
+fn bar(f: *Foo) void {
+    f.* = Foo{ .float = 12.34 };
+    std.debug.print("value: {}\n", .{f.float});
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_switch_continue.zig
+
+```zigconst std = @import("std");
+
+test "switch continue" {
+    sw: switch (@as(i32, 5)) {
+        5 => continue :sw 4,
+
+        // `continue` can occur multiple times within a single switch prong.
+        2...4 => |v| {
+            if (v > 3) {
+                continue :sw 2;
+            } else if (v == 3) {
+
+                // `break` can target labeled loops.
+                break :sw;
+            }
+
+            continue :sw 1;
+        },
+
+        1 => return,
+
+        else => unreachable,
+    }
+}
+
+// test```
+
+
+Reference Filename: verbose_cimport_flag.zig
+
+```zigconst c = @cImport({
+    @cDefine("_NO_CRT_STDIO_INLINE", "1");
+    @cInclude("stdio.h");
+});
+pub fn main() void {
+    _ = c;
+}
+
+// exe=succeed
+// link_libc
+// verbose_cimport```
+
+
+Reference Filename: base64.zig
+
+```zigconst base64 = @import("std").base64;
+
+export fn decode_base_64(
+    dest_ptr: [*]u8,
+    dest_len: usize,
+    source_ptr: [*]const u8,
+    source_len: usize,
+) usize {
+    const src = source_ptr[0..source_len];
+    const dest = dest_ptr[0..dest_len];
+    const base64_decoder = base64.standard.Decoder;
+    const decoded_size = base64_decoder.calcSizeForSlice(src) catch unreachable;
+    base64_decoder.decode(dest[0..decoded_size], src) catch unreachable;
+    return decoded_size;
+}
+
+// syntax```
+
+
+Reference Filename: testing_namespace.zig
+
+```zigconst std = @import("std");
+
+test "expectEqual demo" {
+    const expected: i32 = 42;
+    const actual = 42;
+
+    // The first argument to `expectEqual` is the known, expected, result.
+    // The second argument is the result of some expression.
+    // The actual's type is casted to the type of expected.
+    try std.testing.expectEqual(expected, actual);
+}
+
+test "expectError demo" {
+    const expected_error = error.DemoError;
+    const actual_error_union: anyerror!void = error.DemoError;
+
+    // `expectError` will fail when the actual error is different than
+    // the expected error.
+    try std.testing.expectError(expected_error, actual_error_union);
+}
+
+// test```
+
+
+Reference Filename: runtime_division_by_zero.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    var a: u32 = 1;
+    var b: u32 = 0;
+    _ = .{ &a, &b };
+    const c = a / b;
+    std.debug.print("value: {}\n", .{c});
+}
+
+// exe=fail```
+
+
+Reference Filename: test_comptime_invalid_cast.zig
+
+```zigcomptime {
+    const value: i32 = -1;
+    const unsigned: u32 = @intCast(value);
+    _ = unsigned;
+}
+
+// test_error=type 'u32' cannot represent integer value '-1'```
+
+
+Reference Filename: test_integer_pointer_conversion.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "@intFromPtr and @ptrFromInt" {
+    const ptr: *i32 = @ptrFromInt(0xdeadbee0);
+    const addr = @intFromPtr(ptr);
+    try expect(@TypeOf(addr) == usize);
+    try expect(addr == 0xdeadbee0);
+}
+
+// test```
+
+
+Reference Filename: test_packed_structs.zig
+
+```zigconst std = @import("std");
+const native_endian = @import("builtin").target.cpu.arch.endian();
+const expect = std.testing.expect;
+
+const Full = packed struct {
+    number: u16,
+};
+const Divided = packed struct {
+    half1: u8,
+    quarter3: u4,
+    quarter4: u4,
+};
+
+test "@bitCast between packed structs" {
+    try doTheTest();
+    try comptime doTheTest();
+}
+
+fn doTheTest() !void {
+    try expect(@sizeOf(Full) == 2);
+    try expect(@sizeOf(Divided) == 2);
+    const full = Full{ .number = 0x1234 };
+    const divided: Divided = @bitCast(full);
+    try expect(divided.half1 == 0x34);
+    try expect(divided.quarter3 == 0x2);
+    try expect(divided.quarter4 == 0x1);
+
+    const ordered: [2]u8 = @bitCast(full);
+    switch (native_endian) {
+        .big => {
+            try expect(ordered[0] == 0x12);
+            try expect(ordered[1] == 0x34);
+        },
+        .little => {
+            try expect(ordered[0] == 0x34);
+            try expect(ordered[1] == 0x12);
+        },
+    }
+}
+
+// test```
+
+
+Reference Filename: test_variable_func_alignment.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+var foo: u8 align(4) = 100;
+
+test "global variable alignment" {
+    try expect(@typeInfo(@TypeOf(&foo)).pointer.alignment == 4);
+    try expect(@TypeOf(&foo) == *align(4) u8);
+    const as_pointer_to_array: *align(4) [1]u8 = &foo;
+    const as_slice: []align(4) u8 = as_pointer_to_array;
+    const as_unaligned_slice: []u8 = as_slice;
+    try expect(as_unaligned_slice[0] == 100);
+}
+
+fn derp() align(@sizeOf(usize) * 2) i32 {
+    return 1234;
+}
+fn noop1() align(1) void {}
+fn noop4() align(4) void {}
+
+test "function alignment" {
+    try expect(derp() == 1234);
+    try expect(@TypeOf(derp) == fn () i32);
+    try expect(@TypeOf(&derp) == *align(@sizeOf(usize) * 2) const fn () i32);
+
+    noop1();
+    try expect(@TypeOf(noop1) == fn () void);
+    try expect(@TypeOf(&noop1) == *align(1) const fn () void);
+
+    noop4();
+    try expect(@TypeOf(noop4) == fn () void);
+    try expect(@TypeOf(&noop4) == *align(4) const fn () void);
+}
+
+// test```
+
+
+Reference Filename: test_if.zig
+
+```zig// If expressions have three uses, corresponding to the three types:
+// * bool
+// * ?T
+// * anyerror!T
+
+const expect = @import("std").testing.expect;
+
+test "if expression" {
+    // If expressions are used instead of a ternary expression.
+    const a: u32 = 5;
+    const b: u32 = 4;
+    const result = if (a != b) 47 else 3089;
+    try expect(result == 47);
+}
+
+test "if boolean" {
+    // If expressions test boolean conditions.
+    const a: u32 = 5;
+    const b: u32 = 4;
+    if (a != b) {
+        try expect(true);
+    } else if (a == 9) {
+        unreachable;
+    } else {
+        unreachable;
+    }
+}
+
+test "if error union" {
+    // If expressions test for errors.
+    // Note the |err| capture on the else.
+
+    const a: anyerror!u32 = 0;
+    if (a) |value| {
+        try expect(value == 0);
+    } else |err| {
+        _ = err;
+        unreachable;
+    }
+
+    const b: anyerror!u32 = error.BadValue;
+    if (b) |value| {
+        _ = value;
+        unreachable;
+    } else |err| {
+        try expect(err == error.BadValue);
+    }
+
+    // The else and |err| capture is strictly required.
+    if (a) |value| {
+        try expect(value == 0);
+    } else |_| {}
+
+    // To check only the error value, use an empty block expression.
+    if (b) |_| {} else |err| {
+        try expect(err == error.BadValue);
+    }
+
+    // Access the value by reference using a pointer capture.
+    var c: anyerror!u32 = 3;
+    if (c) |*value| {
+        value.* = 9;
+    } else |_| {
+        unreachable;
+    }
+
+    if (c) |value| {
+        try expect(value == 9);
+    } else |_| {
+        unreachable;
+    }
+}
+
+// test```
+
+
+Reference Filename: test_invalid_defer.zig
+
+```zigfn deferInvalidExample() !void {
+    defer {
+        return error.DeferError;
+    }
+
+    return error.DeferError;
+}
+
+// test_error=cannot return from defer expression```
+
+
+Reference Filename: test_void_in_hashmap.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "turn HashMap into a set with void" {
+    var map = std.AutoHashMap(i32, void).init(std.testing.allocator);
+    defer map.deinit();
+
+    try map.put(1, {});
+    try map.put(2, {});
+
+    try expect(map.contains(2));
+    try expect(!map.contains(3));
+
+    _ = map.remove(2);
+    try expect(!map.contains(2));
+}
+
+// test```
+
+
+Reference Filename: runtime_out_of_bounds_float_to_integer_cast.zig
+
+```zigpub fn main() void {
+    var float: f32 = 4294967296; // runtime-known
+    _ = &float;
+    const int: i32 = @intFromFloat(float);
+    _ = int;
+}
+
+// exe=fail```
+
+
+Reference Filename: test_multidimensional_arrays.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+const expectEqual = std.testing.expectEqual;
+
+const mat4x5 = [4][5]f32{
+    [_]f32{ 1.0, 0.0, 0.0, 0.0, 0.0 },
+    [_]f32{ 0.0, 1.0, 0.0, 1.0, 0.0 },
+    [_]f32{ 0.0, 0.0, 1.0, 0.0, 0.0 },
+    [_]f32{ 0.0, 0.0, 0.0, 1.0, 9.9 },
+};
+test "multidimensional arrays" {
+    // mat4x5 itself is a one-dimensional array of arrays.
+    try expectEqual(mat4x5[1], [_]f32{ 0.0, 1.0, 0.0, 1.0, 0.0 });
+
+    // Access the 2D array by indexing the outer array, and then the inner array.
+    try expect(mat4x5[3][4] == 9.9);
+
+    // Here we iterate with for loops.
+    for (mat4x5, 0..) |row, row_index| {
+        for (row, 0..) |cell, column_index| {
+            if (row_index == column_index) {
+                try expect(cell == 1.0);
+            }
+        }
+    }
+
+    // Initialize a multidimensional array to zeros.
+    const all_zero: [4][5]f32 = .{.{0} ** 5} ** 4;
+    try expect(all_zero[0][0] == 0);
+}
+
+// test```
+
+
+Reference Filename: test_merging_error_sets.zig
+
+```zigconst A = error{
+    NotDir,
+
+    /// A doc comment
+    PathNotFound,
+};
+const B = error{
+    OutOfMemory,
+
+    /// B doc comment
+    PathNotFound,
+};
+
+const C = A || B;
+
+fn foo() C!void {
+    return error.NotDir;
+}
+
+test "merge error sets" {
+    if (foo()) {
+        @panic("unexpected");
+    } else |err| switch (err) {
+        error.OutOfMemory => @panic("unexpected"),
+        error.PathNotFound => @panic("unexpected"),
+        error.NotDir => {},
+    }
+}
+
+// test```
+
+
+Reference Filename: test_enums.zig
+
+```zigconst expect = @import("std").testing.expect;
+const mem = @import("std").mem;
+
+// Declare an enum.
+const Type = enum {
+    ok,
+    not_ok,
+};
+
+// Declare a specific enum field.
+const c = Type.ok;
+
+// If you want access to the ordinal value of an enum, you
+// can specify the tag type.
+const Value = enum(u2) {
+    zero,
+    one,
+    two,
+};
+// Now you can cast between u2 and Value.
+// The ordinal value starts from 0, counting up by 1 from the previous member.
+test "enum ordinal value" {
+    try expect(@intFromEnum(Value.zero) == 0);
+    try expect(@intFromEnum(Value.one) == 1);
+    try expect(@intFromEnum(Value.two) == 2);
+}
+
+// You can override the ordinal value for an enum.
+const Value2 = enum(u32) {
+    hundred = 100,
+    thousand = 1000,
+    million = 1000000,
+};
+test "set enum ordinal value" {
+    try expect(@intFromEnum(Value2.hundred) == 100);
+    try expect(@intFromEnum(Value2.thousand) == 1000);
+    try expect(@intFromEnum(Value2.million) == 1000000);
+}
+
+// You can also override only some values.
+const Value3 = enum(u4) {
+    a,
+    b = 8,
+    c,
+    d = 4,
+    e,
+};
+test "enum implicit ordinal values and overridden values" {
+    try expect(@intFromEnum(Value3.a) == 0);
+    try expect(@intFromEnum(Value3.b) == 8);
+    try expect(@intFromEnum(Value3.c) == 9);
+    try expect(@intFromEnum(Value3.d) == 4);
+    try expect(@intFromEnum(Value3.e) == 5);
+}
+
+// Enums can have methods, the same as structs and unions.
+// Enum methods are not special, they are only namespaced
+// functions that you can call with dot syntax.
+const Suit = enum {
+    clubs,
+    spades,
+    diamonds,
+    hearts,
+
+    pub fn isClubs(self: Suit) bool {
+        return self == Suit.clubs;
+    }
+};
+test "enum method" {
+    const p = Suit.spades;
+    try expect(!p.isClubs());
+}
+
+// An enum can be switched upon.
+const Foo = enum {
+    string,
+    number,
+    none,
+};
+test "enum switch" {
+    const p = Foo.number;
+    const what_is_it = switch (p) {
+        Foo.string => "this is a string",
+        Foo.number => "this is a number",
+        Foo.none => "this is a none",
+    };
+    try expect(mem.eql(u8, what_is_it, "this is a number"));
+}
+
+// @typeInfo can be used to access the integer tag type of an enum.
+const Small = enum {
+    one,
+    two,
+    three,
+    four,
+};
+test "std.meta.Tag" {
+    try expect(@typeInfo(Small).@"enum".tag_type == u2);
+}
+
+// @typeInfo tells us the field count and the fields names:
+test "@typeInfo" {
+    try expect(@typeInfo(Small).@"enum".fields.len == 4);
+    try expect(mem.eql(u8, @typeInfo(Small).@"enum".fields[1].name, "two"));
+}
+
+// @tagName gives a [:0]const u8 representation of an enum value:
+test "@tagName" {
+    try expect(mem.eql(u8, @tagName(Small.three), "three"));
+}
+
+// test```
+
+
+Reference Filename: test_string_literal_to_const_slice.zig
+
+```zigfn foo(s: []const u8) void {
+    _ = s;
+}
+
+test "string literal to constant slice" {
+    foo("hello");
+}
+
+// test```
+
+
+Reference Filename: runtime_shrExact_overflow.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    var x: u8 = 0b10101010; // runtime-known
+    _ = &x;
+    const y = @shrExact(x, 2);
+    std.debug.print("value: {}\n", .{y});
+}
+
+// exe=fail```
+
+
+Reference Filename: test_pointer_casting.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "pointer casting" {
+    const bytes align(@alignOf(u32)) = [_]u8{ 0x12, 0x12, 0x12, 0x12 };
+    const u32_ptr: *const u32 = @ptrCast(&bytes);
+    try expect(u32_ptr.* == 0x12121212);
+
+    // Even this example is contrived - there are better ways to do the above than
+    // pointer casting. For example, using a slice narrowing cast:
+    const u32_value = std.mem.bytesAsSlice(u32, bytes[0..])[0];
+    try expect(u32_value == 0x12121212);
+
+    // And even another way, the most straightforward way to do it:
+    try expect(@as(u32, @bitCast(bytes)) == 0x12121212);
+}
+
+test "pointer child type" {
+    // pointer types have a `child` field which tells you the type they point to.
+    try expect(@typeInfo(*u32).pointer.child == u32);
+}
+
+// test```
+
+
+Reference Filename: defer_unwind.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+const print = std.debug.print;
+
+test "defer unwinding" {
+    print("\n", .{});
+
+    defer {
+        print("1 ", .{});
+    }
+    defer {
+        print("2 ", .{});
+    }
+    if (false) {
+        // defers are not run if they are never executed.
+        defer {
+            print("3 ", .{});
+        }
+    }
+}
+
+// test```
+
+
+Reference Filename: compile_variables.zig
+
+```zigconst builtin = @import("builtin");
+const separator = if (builtin.os.tag == .windows) '\\' else '/';
+
+// syntax```
+
+
+Reference Filename: test_if_optionals.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "if optional" {
+    // If expressions test for null.
+
+    const a: ?u32 = 0;
+    if (a) |value| {
+        try expect(value == 0);
+    } else {
+        unreachable;
+    }
+
+    const b: ?u32 = null;
+    if (b) |_| {
+        unreachable;
+    } else {
+        try expect(true);
+    }
+
+    // The else is not required.
+    if (a) |value| {
+        try expect(value == 0);
+    }
+
+    // To test against null only, use the binary equality operator.
+    if (b == null) {
+        try expect(true);
+    }
+
+    // Access the value by reference using a pointer capture.
+    var c: ?u32 = 3;
+    if (c) |*value| {
+        value.* = 2;
+    }
+
+    if (c) |value| {
+        try expect(value == 2);
+    } else {
+        unreachable;
+    }
+}
+
+test "if error union with optional" {
+    // If expressions test for errors before unwrapping optionals.
+    // The |optional_value| capture's type is ?u32.
+
+    const a: anyerror!?u32 = 0;
+    if (a) |optional_value| {
+        try expect(optional_value.? == 0);
+    } else |err| {
+        _ = err;
+        unreachable;
+    }
+
+    const b: anyerror!?u32 = null;
+    if (b) |optional_value| {
+        try expect(optional_value == null);
+    } else |_| {
+        unreachable;
+    }
+
+    const c: anyerror!?u32 = error.BadValue;
+    if (c) |optional_value| {
+        _ = optional_value;
+        unreachable;
+    } else |err| {
+        try expect(err == error.BadValue);
+    }
+
+    // Access the value by reference by using a pointer capture each time.
+    var d: anyerror!?u32 = 3;
+    if (d) |*optional_value| {
+        if (optional_value.*) |*value| {
+            value.* = 9;
+        }
+    } else |_| {
+        unreachable;
+    }
+
+    if (d) |optional_value| {
+        try expect(optional_value.? == 9);
+    } else |_| {
+        unreachable;
+    }
+}
+
+// test```
+
+
+Reference Filename: build_c.zig
+
+```zigconst std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const lib = b.addSharedLibrary(.{
+        .name = "mathtest",
+        .root_source_file = b.path("mathtest.zig"),
+        .version = .{ .major = 1, .minor = 0, .patch = 0 },
+    });
+    const exe = b.addExecutable(.{
+        .name = "test",
+    });
+    exe.addCSourceFile(.{ .file = b.path("test.c"), .flags = &.{"-std=c99"} });
+    exe.linkLibrary(lib);
+    exe.linkSystemLibrary("c");
+
+    b.default_step.dependOn(&exe.step);
+
+    const run_cmd = exe.run();
+
+    const test_step = b.step("test", "Test the program");
+    test_step.dependOn(&run_cmd.step);
+}
+
+// syntax```
+
+
+Reference Filename: test_comptime_division_by_zero.zig
+
+```zigcomptime {
+    const a: i32 = 1;
+    const b: i32 = 0;
+    const c = a / b;
+    _ = c;
+}
+
+// test_error=division by zero```
+
+
+Reference Filename: test_pointer_arithmetic.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "pointer arithmetic with many-item pointer" {
+    const array = [_]i32{ 1, 2, 3, 4 };
+    var ptr: [*]const i32 = &array;
+
+    try expect(ptr[0] == 1);
+    ptr += 1;
+    try expect(ptr[0] == 2);
+
+    // slicing a many-item pointer without an end is equivalent to
+    // pointer arithmetic: `ptr[start..] == ptr + start`
+    try expect(ptr[1..] == ptr + 1);
+
+    // subtraction between any two pointers except slices based on element size is supported
+    try expect(&ptr[1] - &ptr[0] == 1);
+}
+
+test "pointer arithmetic with slices" {
+    var array = [_]i32{ 1, 2, 3, 4 };
+    var length: usize = 0; // var to make it runtime-known
+    _ = &length; // suppress 'var is never mutated' error
+    var slice = array[length..array.len];
+
+    try expect(slice[0] == 1);
+    try expect(slice.len == 4);
+
+    slice.ptr += 1;
+    // now the slice is in an bad state since len has not been updated
+
+    try expect(slice[0] == 2);
+    try expect(slice.len == 4);
+}
+
+// test```
+
+
+Reference Filename: test_inline_else.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const SliceTypeA = extern struct {
+    len: usize,
+    ptr: [*]u32,
+};
+const SliceTypeB = extern struct {
+    ptr: [*]SliceTypeA,
+    len: usize,
+};
+const AnySlice = union(enum) {
+    a: SliceTypeA,
+    b: SliceTypeB,
+    c: []const u8,
+    d: []AnySlice,
+};
+
+fn withFor(any: AnySlice) usize {
+    const Tag = @typeInfo(AnySlice).@"union".tag_type.?;
+    inline for (@typeInfo(Tag).@"enum".fields) |field| {
+        // With `inline for` the function gets generated as
+        // a series of `if` statements relying on the optimizer
+        // to convert it to a switch.
+        if (field.value == @intFromEnum(any)) {
+            return @field(any, field.name).len;
+        }
+    }
+    // When using `inline for` the compiler doesn't know that every
+    // possible case has been handled requiring an explicit `unreachable`.
+    unreachable;
+}
+
+fn withSwitch(any: AnySlice) usize {
+    return switch (any) {
+        // With `inline else` the function is explicitly generated
+        // as the desired switch and the compiler can check that
+        // every possible case is handled.
+        inline else => |slice| slice.len,
+    };
+}
+
+test "inline for and inline else similarity" {
+    const any = AnySlice{ .c = "hello" };
+    try expect(withFor(any) == 5);
+    try expect(withSwitch(any) == 5);
+}
+
+// test```
+
+
+Reference Filename: test_optional_pointer.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "optional pointers" {
+    // Pointers cannot be null. If you want a null pointer, use the optional
+    // prefix `?` to make the pointer type optional.
+    var ptr: ?*i32 = null;
+
+    var x: i32 = 1;
+    ptr = &x;
+
+    try expect(ptr.?.* == 1);
+
+    // Optional pointers are the same size as normal pointers, because pointer
+    // value 0 is used as the null value.
+    try expect(@sizeOf(?*i32) == @sizeOf(*i32));
+}
+
+// test```
+
+
+Reference Filename: hello_again.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    std.debug.print("Hello, world!\n", .{});
+}
+
+// exe=succeed```
+
+
+Reference Filename: wasi_preopens.zig
+
+```zigconst std = @import("std");
+const fs = std.fs;
+
+pub fn main() !void {
+    var general_purpose_allocator: std.heap.GeneralPurposeAllocator(.{}) = .init;
+    const gpa = general_purpose_allocator.allocator();
+
+    var arena_instance = std.heap.ArenaAllocator.init(gpa);
+    defer arena_instance.deinit();
+    const arena = arena_instance.allocator();
+
+    const preopens = try fs.wasi.preopensAlloc(arena);
+
+    for (preopens.names, 0..) |preopen, i| {
+        std.debug.print("{}: {s}\n", .{ i, preopen });
+    }
+}
+
+// exe=succeed
+// target=wasm32-wasi```
+
+
+Reference Filename: test_anonymous_struct.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "fully anonymous struct" {
+    try check(.{
+        .int = @as(u32, 1234),
+        .float = @as(f64, 12.34),
+        .b = true,
+        .s = "hi",
+    });
+}
+
+fn check(args: anytype) !void {
+    try expect(args.int == 1234);
+    try expect(args.float == 12.34);
+    try expect(args.b);
+    try expect(args.s[0] == 'h');
+    try expect(args.s[1] == 'i');
+}
+
+// test```
+
+
+Reference Filename: test_for_nested_break.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "nested break" {
+    var count: usize = 0;
+    outer: for (1..6) |_| {
+        for (1..6) |_| {
+            count += 1;
+            break :outer;
+        }
+    }
+    try expect(count == 1);
+}
+
+test "nested continue" {
+    var count: usize = 0;
+    outer: for (1..9) |_| {
+        for (1..6) |_| {
+            count += 1;
+            continue :outer;
+        }
+    }
+
+    try expect(count == 8);
+}
+
+// test```
+
+
+Reference Filename: test_while_null_capture.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "while null capture" {
+    var sum1: u32 = 0;
+    numbers_left = 3;
+    while (eventuallyNullSequence()) |value| {
+        sum1 += value;
+    }
+    try expect(sum1 == 3);
+
+    // null capture with an else block
+    var sum2: u32 = 0;
+    numbers_left = 3;
+    while (eventuallyNullSequence()) |value| {
+        sum2 += value;
+    } else {
+        try expect(sum2 == 3);
+    }
+
+    // null capture with a continue expression
+    var i: u32 = 0;
+    var sum3: u32 = 0;
+    numbers_left = 3;
+    while (eventuallyNullSequence()) |value| : (i += 1) {
+        sum3 += value;
+    }
+    try expect(i == 3);
+}
+
+var numbers_left: u32 = undefined;
+fn eventuallyNullSequence() ?u32 {
+    return if (numbers_left == 0) null else blk: {
+        numbers_left -= 1;
+        break :blk numbers_left;
+    };
+}
+
+// test```
+
+
+Reference Filename: test_exhaustive_switch.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const Color = enum {
+    auto,
+    off,
+    on,
+};
+
+test "enum literals with switch" {
+    const color = Color.off;
+    const result = switch (color) {
+        .auto => false,
+        .on => false,
+        .off => true,
+    };
+    try expect(result);
+}
+
+// test```
+
+
+Reference Filename: identifiers.zig
+
+```zigconst @"identifier with spaces in it" = 0xff;
+const @"1SmallStep4Man" = 112358;
+
+const c = @import("std").c;
+pub extern "c" fn @"error"() void;
+pub extern "c" fn @"fstat$INODE64"(fd: c.fd_t, buf: *c.Stat) c_int;
+
+const Color = enum {
+    red,
+    @"really red",
+};
+const color: Color = .@"really red";
+
+// syntax```
+
+
+Reference Filename: string_literals.zig
+
+```zigconst print = @import("std").debug.print;
+const mem = @import("std").mem; // will be used to compare bytes
+
+pub fn main() void {
+    const bytes = "hello";
+    print("{}\n", .{@TypeOf(bytes)}); // *const [5:0]u8
+    print("{d}\n", .{bytes.len}); // 5
+    print("{c}\n", .{bytes[1]}); // 'e'
+    print("{d}\n", .{bytes[5]}); // 0
+    print("{}\n", .{'e' == '\x65'}); // true
+    print("{d}\n", .{'\u{1f4a9}'}); // 128169
+    print("{d}\n", .{'💯'}); // 128175
+    print("{u}\n", .{'⚡'});
+    print("{}\n", .{mem.eql(u8, "hello", "h\x65llo")}); // true
+    print("{}\n", .{mem.eql(u8, "💯", "\xf0\x9f\x92\xaf")}); // also true
+    const invalid_utf8 = "\xff\xfe"; // non-UTF-8 strings are possible with \xNN notation.
+    print("0x{x}\n", .{invalid_utf8[1]}); // indexing them returns individual bytes...
+    print("0x{x}\n", .{"💯"[1]}); // ...as does indexing part-way through non-ASCII characters
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_packed_struct_field_address.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const BitField = packed struct {
+    a: u3,
+    b: u3,
+    c: u2,
+};
+
+var bit_field = BitField{
+    .a = 1,
+    .b = 2,
+    .c = 3,
+};
+
+test "pointers of sub-byte-aligned fields share addresses" {
+    try expect(@intFromPtr(&bit_field.a) == @intFromPtr(&bit_field.b));
+    try expect(@intFromPtr(&bit_field.a) == @intFromPtr(&bit_field.c));
+}
+
+// test```
+
+
+Reference Filename: constant_identifier_cannot_change.zig
+
+```zigconst x = 1234;
+
+fn foo() void {
+    // It works at file scope as well as inside functions.
+    const y = 5678;
+
+    // Once assigned, an identifier cannot be changed.
+    y += 1;
+}
+
+pub fn main() void {
+    foo();
+}
+
+// exe=build_fail```
+
+
+Reference Filename: test_bitOffsetOf_offsetOf.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const BitField = packed struct {
+    a: u3,
+    b: u3,
+    c: u2,
+};
+
+test "offsets of non-byte-aligned fields" {
+    comptime {
+        try expect(@bitOffsetOf(BitField, "a") == 0);
+        try expect(@bitOffsetOf(BitField, "b") == 3);
+        try expect(@bitOffsetOf(BitField, "c") == 6);
+
+        try expect(@offsetOf(BitField, "a") == 0);
+        try expect(@offsetOf(BitField, "b") == 0);
+        try expect(@offsetOf(BitField, "c") == 0);
+    }
+}
+
+// test```
+
+
+Reference Filename: null.zig
+
+```zigconst optional_value: ?i32 = null;
+
+// syntax```
+
+
+Reference Filename: test_slice_bounds.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "pointer slicing" {
+    var array = [_]u8{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+    var start: usize = 2; // var to make it runtime-known
+    _ = &start; // suppress 'var is never mutated' error
+    const slice = array[start..4];
+    try expect(slice.len == 2);
+
+    try expect(array[3] == 4);
+    slice[1] += 1;
+    try expect(array[3] == 5);
+}
+
+// test```
+
+
+Reference Filename: test_no_op_casts.zig
+
+```zigtest "type coercion - const qualification" {
+    var a: i32 = 1;
+    const b: *i32 = &a;
+    foo(b);
+}
+
+fn foo(_: *const i32) void {}
+
+// test```
+
+
+Reference Filename: test_comptime_invalid_error_set_cast.zig
+
+```zigconst Set1 = error{
+    A,
+    B,
+};
+const Set2 = error{
+    A,
+    C,
+};
+comptime {
+    _ = @as(Set2, @errorCast(Set1.B));
+}
+
+// test_error='error.B' not a member of error set 'error{A,C}'```
+
+
+Reference Filename: test_comptime_pointers.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "comptime pointers" {
+    comptime {
+        var x: i32 = 1;
+        const ptr = &x;
+        ptr.* += 1;
+        x += 1;
+        try expect(ptr.* == 3);
+    }
+}
+
+// test```
+
+
+Reference Filename: stack_trace.zig
+
+```zigpub fn main() void {
+    foo(12);
+}
+
+fn foo(x: i32) void {
+    if (x >= 5) {
+        bar();
+    } else {
+        bang2();
+    }
+}
+
+fn bar() void {
+    if (baz()) {
+        quux();
+    } else {
+        hello();
+    }
+}
+
+fn baz() bool {
+    return bang1();
+}
+
+fn quux() void {
+    bang2();
+}
+
+fn hello() void {
+    bang2();
+}
+
+fn bang1() bool {
+    return false;
+}
+
+fn bang2() void {
+    @panic("PermissionDenied");
+}
+
+// exe=fail```
+
+
+Reference Filename: destructuring_arrays.zig
+
+```zigconst print = @import("std").debug.print;
+
+fn swizzleRgbaToBgra(rgba: [4]u8) [4]u8 {
+    // readable swizzling by destructuring
+    const r, const g, const b, const a = rgba;
+    return .{ b, g, r, a };
+}
+
+pub fn main() void {
+    const pos = [_]i32{ 1, 2 };
+    const x, const y = pos;
+    print("x = {}, y = {}\n", .{x, y});
+
+    const orange: [4]u8 = .{ 255, 165, 0, 255 };
+    print("{any}\n", .{swizzleRgbaToBgra(orange)});
+}
+
+// exe=succeed```
+
+
+Reference Filename: runtime_invalid_error_set_cast.zig
+
+```zigconst std = @import("std");
+
+const Set1 = error{
+    A,
+    B,
+};
+const Set2 = error{
+    A,
+    C,
+};
+pub fn main() void {
+    foo(Set1.B);
+}
+fn foo(set1: Set1) void {
+    const x: Set2 = @errorCast(set1);
+    std.debug.print("value: {}\n", .{x});
+}
+
+// exe=fail```
+
+
+Reference Filename: float_special_values.zig
+
+```zigconst std = @import("std");
+
+const inf = std.math.inf(f32);
+const negative_inf = -std.math.inf(f64);
+const nan = std.math.nan(f128);
+
+// syntax```
+
+
+Reference Filename: test_null_terminated_array.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "0-terminated sentinel array" {
+    const array = [_:0]u8{ 1, 2, 3, 4 };
+
+    try expect(@TypeOf(array) == [4:0]u8);
+    try expect(array.len == 4);
+    try expect(array[4] == 0);
+}
+
+test "extra 0s in 0-terminated sentinel array" {
+    // The sentinel value may appear earlier, but does not influence the compile-time 'len'.
+    const array = [_:0]u8{ 1, 0, 0, 4 };
+
+    try expect(@TypeOf(array) == [4:0]u8);
+    try expect(array.len == 4);
+    try expect(array[4] == 0);
+}
+
+// test```
+
+
+Reference Filename: test_labeled_break.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "labeled break from labeled block expression" {
+    var y: i32 = 123;
+
+    const x = blk: {
+        y += 1;
+        break :blk y;
+    };
+    try expect(x == 124);
+    try expect(y == 124);
+}
+
+// test```
+
+
+Reference Filename: runtime_remainder_division_by_zero.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    var a: u32 = 10;
+    var b: u32 = 0;
+    _ = .{ &a, &b };
+    const c = a % b;
+    std.debug.print("value: {}\n", .{c});
+}
+
+// exe=fail```
+
+
+Reference Filename: test_while_break.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "while break" {
+    var i: usize = 0;
+    while (true) {
+        if (i == 10)
+            break;
+        i += 1;
+    }
+    try expect(i == 10);
+}
+
+// test```
+
+
+Reference Filename: float_mode_exe.zig
+
+```zigconst print = @import("std").debug.print;
+
+extern fn foo_strict(x: f64) f64;
+extern fn foo_optimized(x: f64) f64;
+
+pub fn main() void {
+    const x = 0.001;
+    print("optimized = {}\n", .{foo_optimized(x)});
+    print("strict = {}\n", .{foo_strict(x)});
+}
+
+// syntax```
+
+
+Reference Filename: test_setEvalBranchQuota_builtin.zig
+
+```zigtest "foo" {
+    comptime {
+        @setEvalBranchQuota(1001);
+        var i = 0;
+        while (i < 1001) : (i += 1) {}
+    }
+}
+
+// test```
+
+
+Reference Filename: test_switch_dispatch_loop.zig
+
+```zigconst std = @import("std");
+const expectEqual = std.testing.expectEqual;
+
+const Instruction = enum {
+    add,
+    mul,
+    end,
+};
+
+fn evaluate(initial_stack: []const i32, code: []const Instruction) !i32 {
+    var stack = try std.BoundedArray(i32, 8).fromSlice(initial_stack);
+    var ip: usize = 0;
+
+    return vm: switch (code[ip]) {
+        // Because all code after `continue` is unreachable, this branch does
+        // not provide a result.
+        .add => {
+            try stack.append(stack.pop().? + stack.pop().?);
+
+            ip += 1;
+            continue :vm code[ip];
+        },
+        .mul => {
+            try stack.append(stack.pop().? * stack.pop().?);
+
+            ip += 1;
+            continue :vm code[ip];
+        },
+        .end => stack.pop().?,
+    };
+}
+
+test "evaluate" {
+    const result = try evaluate(&.{ 7, 2, -3 }, &.{ .mul, .add, .end });
+    try expectEqual(1, result);
+}
+
+// test```
+
+
+Reference Filename: test_setRuntimeSafety_builtin.zig
+
+```zigtest "@setRuntimeSafety" {
+    // The builtin applies to the scope that it is called in. So here, integer overflow
+    // will not be caught in ReleaseFast and ReleaseSmall modes:
+    // var x: u8 = 255;
+    // x += 1; // Unchecked Illegal Behavior in ReleaseFast/ReleaseSmall modes.
+    {
+        // However this block has safety enabled, so safety checks happen here,
+        // even in ReleaseFast and ReleaseSmall modes.
+        @setRuntimeSafety(true);
+        var x: u8 = 255;
+        x += 1;
+
+        {
+            // The value can be overridden at any scope. So here integer overflow
+            // would not be caught in any build mode.
+            @setRuntimeSafety(false);
+            // var x: u8 = 255;
+            // x += 1; // Unchecked Illegal Behavior in all build modes.
+        }
+    }
+}
+
+// test_safety=integer overflow
+// optimize=ReleaseFast```
+
+
+Reference Filename: destructuring_block.zig
+
+```zigconst print = @import("std").debug.print;
+
+pub fn main() void {
+    const digits = [_]i8 { 3, 8, 9, 0, 7, 4, 1 };
+
+    const min, const max = blk: {
+        var min: i8 = 127;
+        var max: i8 = -128;
+
+        for (digits) |digit| {
+            if (digit < min) min = digit;
+            if (digit > max) max = digit;
+        }
+
+        break :blk .{ min, max };
+    };
+
+    print("min = {}", .{ min });
+    print("max = {}", .{ max });
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_reduce_builtin.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "vector @reduce" {
+    const V = @Vector(4, i32);
+    const value = V{ 1, -1, 1, -1 };
+    const result = value > @as(V, @splat(0));
+    // result is { true, false, true, false };
+    try comptime expect(@TypeOf(result) == @Vector(4, bool));
+    const is_all_true = @reduce(.And, result);
+    try comptime expect(@TypeOf(is_all_true) == bool);
+    try expect(is_all_true == false);
+}
+
+// test```
+
+
+Reference Filename: test_comptime_shrExact_overflow.zig
+
+```zigcomptime {
+    const x = @shrExact(@as(u8, 0b10101010), 2);
+    _ = x;
+}
+
+// test_error=exact shift shifted out 1 bits```
+
+
+Reference Filename: test_allocator.zig
+
+```zigconst std = @import("std");
+const Allocator = std.mem.Allocator;
+const expect = std.testing.expect;
+
+test "using an allocator" {
+    var buffer: [100]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const allocator = fba.allocator();
+    const result = try concat(allocator, "foo", "bar");
+    try expect(std.mem.eql(u8, "foobar", result));
+}
+
+fn concat(allocator: Allocator, a: []const u8, b: []const u8) ![]u8 {
+    const result = try allocator.alloc(u8, a.len + b.len);
+    @memcpy(result[0..a.len], a);
+    @memcpy(result[a.len..], b);
+    return result;
+}
+
+// test```
+
+
+Reference Filename: test_wraparound_semantics.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+const minInt = std.math.minInt;
+const maxInt = std.math.maxInt;
+
+test "wraparound addition and subtraction" {
+    const x: i32 = maxInt(i32);
+    const min_val = x +% 1;
+    try expect(min_val == minInt(i32));
+    const max_val = min_val -% 1;
+    try expect(max_val == maxInt(i32));
+}
+
+// test```
+
+
+Reference Filename: test_intCast_builtin.zig
+
+```zigtest "integer cast panic" {
+    var a: u16 = 0xabcd; // runtime-known
+    _ = &a;
+    const b: u8 = @intCast(a);
+    _ = b;
+}
+
+// test_error=cast truncated bits```
+
+
+Reference Filename: cImport_builtin.zig
+
+```zigconst c = @cImport({
+    // See https://github.com/ziglang/zig/issues/515
+    @cDefine("_NO_CRT_STDIO_INLINE", "1");
+    @cInclude("stdio.h");
+});
+pub fn main() void {
+    _ = c.printf("hello\n");
+}
+
+// exe=succeed
+// link_libc```
+
+
+Reference Filename: sentinel-terminated_pointer.zig
+
+```zigconst std = @import("std");
+
+// This is also available as `std.c.printf`.
+pub extern "c" fn printf(format: [*:0]const u8, ...) c_int;
+
+pub fn main() anyerror!void {
+    _ = printf("Hello, world!\n"); // OK
+
+    const msg = "Hello, world!\n";
+    const non_null_terminated_msg: [msg.len]u8 = msg.*;
+    _ = printf(&non_null_terminated_msg);
+}
+
+// exe=build_fail
+// link_libc```
+
+
+Reference Filename: test_switch_tagged_union.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "switch on tagged union" {
+    const Point = struct {
+        x: u8,
+        y: u8,
+    };
+    const Item = union(enum) {
+        a: u32,
+        c: Point,
+        d,
+        e: u32,
+    };
+
+    var a = Item{ .c = Point{ .x = 1, .y = 2 } };
+
+    // Switching on more complex enums is allowed.
+    const b = switch (a) {
+        // A capture group is allowed on a match, and will return the enum
+        // value matched. If the payload types of both cases are the same
+        // they can be put into the same switch prong.
+        Item.a, Item.e => |item| item,
+
+        // A reference to the matched value can be obtained using `*` syntax.
+        Item.c => |*item| blk: {
+            item.*.x += 1;
+            break :blk 6;
+        },
+
+        // No else is required if the types cases was exhaustively handled
+        Item.d => 8,
+    };
+
+    try expect(b == 6);
+    try expect(a.c.x == 2);
+}
+
+// test```
+
+
+Reference Filename: poc_print_fn.zig
+
+```zigconst Writer = struct {
+    /// Calls print and then flushes the buffer.
+    pub fn print(self: *Writer, comptime format: []const u8, args: anytype) anyerror!void {
+        const State = enum {
+            start,
+            open_brace,
+            close_brace,
+        };
+
+        comptime var start_index: usize = 0;
+        comptime var state = State.start;
+        comptime var next_arg: usize = 0;
+
+        inline for (format, 0..) |c, i| {
+            switch (state) {
+                State.start => switch (c) {
+                    '{' => {
+                        if (start_index < i) try self.write(format[start_index..i]);
+                        state = State.open_brace;
+                    },
+                    '}' => {
+                        if (start_index < i) try self.write(format[start_index..i]);
+                        state = State.close_brace;
+                    },
+                    else => {},
+                },
+                State.open_brace => switch (c) {
+                    '{' => {
+                        state = State.start;
+                        start_index = i;
+                    },
+                    '}' => {
+                        try self.printValue(args[next_arg]);
+                        next_arg += 1;
+                        state = State.start;
+                        start_index = i + 1;
+                    },
+                    's' => {
+                        continue;
+                    },
+                    else => @compileError("Unknown format character: " ++ [1]u8{c}),
+                },
+                State.close_brace => switch (c) {
+                    '}' => {
+                        state = State.start;
+                        start_index = i;
+                    },
+                    else => @compileError("Single '}' encountered in format string"),
+                },
+            }
+        }
+        comptime {
+            if (args.len != next_arg) {
+                @compileError("Unused arguments");
+            }
+            if (state != State.start) {
+                @compileError("Incomplete format string: " ++ format);
+            }
+        }
+        if (start_index < format.len) {
+            try self.write(format[start_index..format.len]);
+        }
+        try self.flush();
+    }
+
+    fn write(self: *Writer, value: []const u8) !void {
+        _ = self;
+        _ = value;
+    }
+    pub fn printValue(self: *Writer, value: anytype) !void {
+        _ = self;
+        _ = value;
+    }
+    fn flush(self: *Writer) !void {
+        _ = self;
+    }
+};
+
+// syntax```
+
+
+Reference Filename: testing_introduction.zig
+
+```zigconst std = @import("std");
+
+test "expect addOne adds one to 41" {
+
+    // The Standard Library contains useful functions to help create tests.
+    // `expect` is a function that verifies its argument is true.
+    // It will return an error if its argument is false to indicate a failure.
+    // `try` is used to return an error to the test runner to notify it that the test failed.
+    try std.testing.expect(addOne(41) == 42);
+}
+
+test addOne {
+    // A test name can also be written using an identifier.
+    // This is a doctest, and serves as documentation for `addOne`.
+    try std.testing.expect(addOne(41) == 42);
+}
+
+/// The function `addOne` adds one to the number given as its argument.
+fn addOne(number: i32) i32 {
+    return number + 1;
+}
+
+// test```
+
+
+Reference Filename: invalid_doc-comment.zig
+
+```zig/// doc-comment
+//! top-level doc-comment
+const std = @import("std");
+
+// obj=expected type expression, found 'a document comment'```
+
+
+Reference Filename: handle_error_with_catch_block.zig.zig
+
+```zigconst parseU64 = @import("error_union_parsing_u64.zig").parseU64;
+
+fn doAThing(str: []u8) void {
+    const number = parseU64(str, 10) catch blk: {
+        // do things
+        break :blk 13;
+    };
+    _ = number; // number is now initialized
+}
+
+// syntax```
+
+
+Reference Filename: test_comptime_invalid_cast_truncate.zig
+
+```zigcomptime {
+    const spartan_count: u16 = 300;
+    const byte: u8 = @intCast(spartan_count);
+    _ = byte;
+}
+
+// test_error=type 'u8' cannot represent integer value '300'```
+
+
+Reference Filename: test_coerce_error_superset_to_subset.zig
+
+```zigconst FileOpenError = error{
+    AccessDenied,
+    OutOfMemory,
+    FileNotFound,
+};
+
+const AllocationError = error{
+    OutOfMemory,
+};
+
+test "coerce superset to subset" {
+    foo(FileOpenError.OutOfMemory) catch {};
+}
+
+fn foo(err: FileOpenError) AllocationError {
+    return err;
+}
+
+// test_error=not a member of destination error set```
+
+
+Reference Filename: test_basic_slices.zig
+
+```zigconst expect = @import("std").testing.expect;
+const expectEqualSlices = @import("std").testing.expectEqualSlices;
+
+test "basic slices" {
+    var array = [_]i32{ 1, 2, 3, 4 };
+    var known_at_runtime_zero: usize = 0;
+    _ = &known_at_runtime_zero;
+    const slice = array[known_at_runtime_zero..array.len];
+
+    // alternative initialization using result location
+    const alt_slice: []const i32 = &.{ 1, 2, 3, 4 };
+
+    try expectEqualSlices(i32, slice, alt_slice);
+
+    try expect(@TypeOf(slice) == []i32);
+    try expect(&slice[0] == &array[0]);
+    try expect(slice.len == array.len);
+
+    // If you slice with comptime-known start and end positions, the result is
+    // a pointer to an array, rather than a slice.
+    const array_ptr = array[0..array.len];
+    try expect(@TypeOf(array_ptr) == *[array.len]i32);
+
+    // You can perform a slice-by-length by slicing twice. This allows the compiler
+    // to perform some optimisations like recognising a comptime-known length when
+    // the start position is only known at runtime.
+    var runtime_start: usize = 1;
+    _ = &runtime_start;
+    const length = 2;
+    const array_ptr_len = array[runtime_start..][0..length];
+    try expect(@TypeOf(array_ptr_len) == *[length]i32);
+
+    // Using the address-of operator on a slice gives a single-item pointer.
+    try expect(@TypeOf(&slice[0]) == *i32);
+    // Using the `ptr` field gives a many-item pointer.
+    try expect(@TypeOf(slice.ptr) == [*]i32);
+    try expect(@intFromPtr(slice.ptr) == @intFromPtr(&slice[0]));
+
+    // Slices have array bounds checking. If you try to access something out
+    // of bounds, you'll get a safety check failure:
+    slice[10] += 1;
+
+    // Note that `slice.ptr` does not invoke safety checking, while `&slice[0]`
+    // asserts that the slice has len > 0.
+
+    // Empty slices can be created like this:
+    const empty1 = &[0]u8{};
+    // If the type is known you can use this short hand:
+    const empty2: []u8 = &.{};
+    try expect(empty1.len == 0);
+    try expect(empty2.len == 0);
+
+    // A zero-length initialization can always be used to create an empty slice, even if the slice is mutable.
+    // This is because the pointed-to data is zero bits long, so its immutability is irrelevant.
+}
+
+// test_safety=index out of bounds```
+
+
+Reference Filename: testing_null_with_if.zig
+
+```zigconst print = @import("std").debug.print;
+pub fn main() void {
+    const optional_number: ?i32 = null;
+
+    if (optional_number) |number| {
+        print("got number: {}\n", .{number});
+    } else {
+        print("it's null\n", .{});
+    }
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_without_setEvalBranchQuota_builtin.zig
+
+```zigtest "foo" {
+    comptime {
+        var i = 0;
+        while (i < 1001) : (i += 1) {}
+    }
+}
+
+// test_error=evaluation exceeded 1000 backwards branches```
+
+
+Reference Filename: test_compileLog_builtin.zig
+
+```zigconst print = @import("std").debug.print;
+
+const num1 = blk: {
+    var val1: i32 = 99;
+    @compileLog("comptime val1 = ", val1);
+    val1 = val1 + 1;
+    break :blk val1;
+};
+
+test "main" {
+    @compileLog("comptime in main");
+
+    print("Runtime in main, num1 = {}.\n", .{num1});
+}
+
+// test_error=found compile log statement```
+
+
+Reference Filename: test_inferred_error_sets.zig
+
+```zig// With an inferred error set
+pub fn add_inferred(comptime T: type, a: T, b: T) !T {
+    const ov = @addWithOverflow(a, b);
+    if (ov[1] != 0) return error.Overflow;
+    return ov[0];
+}
+
+// With an explicit error set
+pub fn add_explicit(comptime T: type, a: T, b: T) Error!T {
+    const ov = @addWithOverflow(a, b);
+    if (ov[1] != 0) return error.Overflow;
+    return ov[0];
+}
+
+const Error = error{
+    Overflow,
+};
+
+const std = @import("std");
+
+test "inferred error set" {
+    if (add_inferred(u8, 255, 1)) |_| unreachable else |err| switch (err) {
+        error.Overflow => {}, // ok
+    }
+}
+
+// test```
+
+
+Reference Filename: test_unreachable.zig
+
+```zig// unreachable is used to assert that control flow will never reach a
+// particular location:
+test "basic math" {
+    const x = 1;
+    const y = 2;
+    if (x + y != 3) {
+        unreachable;
+    }
+}
+
+// test```
+
+
+Reference Filename: test_namespaced_container_level_variable.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "namespaced container level variable" {
+    try expect(foo() == 1235);
+    try expect(foo() == 1236);
+}
+
+const S = struct {
+    var x: i32 = 1234;
+};
+
+fn foo() i32 {
+    S.x += 1;
+    return S.x;
+}
+
+// test```
+
+
+Reference Filename: test_string_literal_to_slice.zig
+
+```zigfn foo(s: []u8) void {
+    _ = s;
+}
+
+test "string literal to mutable slice" {
+    foo("hello");
+}
+
+// test_error=expected type '[]u8', found '*const [5:0]u8'```
+
+
+Reference Filename: addWithOverflow_builtin.zig
+
+```zigconst print = @import("std").debug.print;
+pub fn main() void {
+    const byte: u8 = 255;
+
+    const ov = @addWithOverflow(byte, 10);
+    if (ov[1] != 0) {
+        print("overflowed result: {}\n", .{ov[0]});
+    } else {
+        print("result: {}\n", .{ov[0]});
+    }
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_round_builtin.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "@round" {
+    try expect(@round(1.4) == 1);
+    try expect(@round(1.5) == 2);
+    try expect(@round(-1.4) == -1);
+    try expect(@round(-2.5) == -3);
+}
+
+// test```
+
+
+Reference Filename: result_type_propagation.zig
+
+```zigconst expectEqual = @import("std").testing.expectEqual;
+test "result type propagates through struct initializer" {
+    const S = struct { x: u32 };
+    const val: u64 = 123;
+    const s: S = .{ .x = @intCast(val) };
+    // .{ .x = @intCast(val) }   has result type `S` due to the type annotation
+    //         @intCast(val)     has result type `u32` due to the type of the field `S.x`
+    //                  val      has no result type, as it is permitted to be any integer type
+    try expectEqual(@as(u32, 123), s.x);
+}
+
+// test```
+
+
+Reference Filename: test_aligned_struct_fields.zig
+
+```zigconst std = @import("std");
+const expectEqual = std.testing.expectEqual;
+
+test "aligned struct fields" {
+    const S = struct {
+        a: u32 align(2),
+        b: u32 align(64),
+    };
+    var foo = S{ .a = 1, .b = 2 };
+
+    try expectEqual(64, @alignOf(S));
+    try expectEqual(*align(2) u32, @TypeOf(&foo.a));
+    try expectEqual(*align(64) u32, @TypeOf(&foo.b));
+}
+
+// test```
+
+
+Reference Filename: std_options.zig
+
+```zig/// The presence of this declaration allows the program to override certain behaviors of the standard library.
+/// For a full list of available options, see the documentation for `std.Options`.
+pub const std_options: std.Options = .{
+    // By default, in safe build modes, the standard library will attach a segfault handler to the program to
+    // print a helpful stack trace if a segmentation fault occurs. Here, we can disable this, or even enable
+    // it in unsafe build modes.
+    .enable_segfault_handler = true,
+    // This is the logging function used by `std.log`.
+    .logFn = myLogFn,
+};
+
+fn myLogFn(
+    comptime level: std.log.Level,
+    comptime scope: @Type(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    // We could do anything we want here!
+    // ...but actually, let's just call the default implementation.
+    std.log.defaultLog(level, scope, format, args);
+}
+
+const std = @import("std");
+
+// syntax```
+
+
+Reference Filename: runtime_divExact_remainder.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    var a: u32 = 10;
+    var b: u32 = 3;
+    _ = .{ &a, &b };
+    const c = @divExact(a, b);
+    std.debug.print("value: {}\n", .{c});
+}
+
+// exe=fail```
+
+
+Reference Filename: test_simple_union.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const Payload = union {
+    int: i64,
+    float: f64,
+    boolean: bool,
+};
+test "simple union" {
+    var payload = Payload{ .int = 1234 };
+    try expect(payload.int == 1234);
+    payload = Payload{ .float = 12.34 };
+    try expect(payload.float == 12.34);
+}
+
+// test```
+
+
+Reference Filename: panic_handler.zig
+
+```zigpub fn main() void {
+    @setRuntimeSafety(true);
+    var x: u8 = 255;
+    // Let's overflow this integer!
+    x += 1;
+}
+
+pub const panic = std.debug.FullPanic(myPanic);
+
+fn myPanic(msg: []const u8, first_trace_addr: ?usize) noreturn {
+    _ = first_trace_addr;
+    std.debug.print("Panic! {s}\n", .{msg});
+    std.process.exit(1);
+}
+
+const std = @import("std");
+
+// exe=fail```
+
+
+Reference Filename: poc_printValue_fn.zig
+
+```zigconst Writer = struct {
+    pub fn printValue(self: *Writer, value: anytype) !void {
+        switch (@typeInfo(@TypeOf(value))) {
+            .int => {
+                return self.writeInt(value);
+            },
+            .float => {
+                return self.writeFloat(value);
+            },
+            .pointer => {
+                return self.write(value);
+            },
+            else => {
+                @compileError("Unable to print type '" ++ @typeName(@TypeOf(value)) ++ "'");
+            },
+        }
+    }
+
+    fn write(self: *Writer, value: []const u8) !void {
+        _ = self;
+        _ = value;
+    }
+    fn writeInt(self: *Writer, value: anytype) !void {
+        _ = self;
+        _ = value;
+    }
+    fn writeFloat(self: *Writer, value: anytype) !void {
+        _ = self;
+        _ = value;
+    }
+};
+
+// syntax```
+
+
+Reference Filename: macro.zig
+
+```zigpub export fn foo() c_int {
+    var a: c_int = 1;
+    _ = &a;
+    var b: c_int = 2;
+    _ = &b;
+    return a + b;
+}
+pub const MAKELOCAL = @compileError("unable to translate C expr: unexpected token .Equal"); // macro.c:1:9
+
+// syntax```
+
+
+Reference Filename: test_hasDecl_builtin.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const Foo = struct {
+    nope: i32,
+
+    pub var blah = "xxx";
+    const hi = 1;
+};
+
+test "@hasDecl" {
+    try expect(@hasDecl(Foo, "blah"));
+
+    // Even though `hi` is private, @hasDecl returns true because this test is
+    // in the same file scope as Foo. It would return false if Foo was declared
+    // in a different file.
+    try expect(@hasDecl(Foo, "hi"));
+
+    // @hasDecl is for declarations; not fields.
+    try expect(!@hasDecl(Foo, "nope"));
+    try expect(!@hasDecl(Foo, "nope1234"));
+}
+
+// test```
+
+
+Reference Filename: test_wasmMemoryGrow_builtin.zig
+
+```zigconst std = @import("std");
+const native_arch = @import("builtin").target.cpu.arch;
+const expect = std.testing.expect;
+
+test "@wasmMemoryGrow" {
+    if (native_arch != .wasm32) return error.SkipZigTest;
+
+    const prev = @wasmMemorySize(0);
+    try expect(prev == @wasmMemoryGrow(0, 1));
+    try expect(prev + 1 == @wasmMemorySize(0));
+}
+
+// test```
+
+
+Reference Filename: inline_prong_range.zig
+
+```zigfn isFieldOptional(comptime T: type, field_index: usize) !bool {
+    const fields = @typeInfo(T).@"struct".fields;
+    return switch (field_index) {
+        inline 0...fields.len - 1 => |idx| @typeInfo(fields[idx].type) == .optional,
+        else => return error.IndexOutOfBounds,
+    };
+}
+
+// syntax```
+
+
+Reference Filename: test_this_builtin.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "@This()" {
+    var items = [_]i32{ 1, 2, 3, 4 };
+    const list = List(i32){ .items = items[0..] };
+    try expect(list.length() == 4);
+}
+
+fn List(comptime T: type) type {
+    return struct {
+        const Self = @This();
+
+        items: []T,
+
+        fn length(self: Self) usize {
+            return self.items.len;
+        }
+    };
+}
+
+// test```
+
+
+Reference Filename: test_global_assembly.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+comptime {
+    asm (
+        \\.global my_func;
+        \\.type my_func, @function;
+        \\my_func:
+        \\  lea (%rdi,%rsi,1),%eax
+        \\  retq
+    );
+}
+
+extern fn my_func(a: i32, b: i32) i32;
+
+test "global assembly" {
+    try expect(my_func(12, 34) == 46);
+}
+
+// test
+// target=x86_64-linux```
+
+
+Reference Filename: test_comptime_overflow.zig
+
+```zigcomptime {
+    var byte: u8 = 255;
+    byte += 1;
+}
+
+// test_error=overflow of integer type 'u8' with value '256'```
+
+
+Reference Filename: test_fibonacci_recursion.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+fn fibonacci(index: u32) u32 {
+    if (index < 2) return index;
+    return fibonacci(index - 1) + fibonacci(index - 2);
+}
+
+test "fibonacci" {
+    // test fibonacci at run-time
+    try expect(fibonacci(7) == 13);
+
+    // test fibonacci at compile-time
+    try comptime expect(fibonacci(7) == 13);
+}
+
+// test```
+
+
+Reference Filename: test_coerce_unions_enums.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const E = enum {
+    one,
+    two,
+    three,
+};
+
+const U = union(E) {
+    one: i32,
+    two: f32,
+    three,
+};
+
+const U2 = union(enum) {
+    a: void,
+    b: f32,
+
+    fn tag(self: U2) usize {
+        switch (self) {
+            .a => return 1,
+            .b => return 2,
+        }
+    }
+};
+
+test "coercion between unions and enums" {
+    const u = U{ .two = 12.34 };
+    const e: E = u; // coerce union to enum
+    try expect(e == E.two);
+
+    const three = E.three;
+    const u_2: U = three; // coerce enum to union
+    try expect(u_2 == E.three);
+
+    const u_3: U = .three; // coerce enum literal to union
+    try expect(u_3 == E.three);
+
+    const u_4: U2 = .a; // coerce enum literal to union with inferred enum tag type.
+    try expect(u_4.tag() == 1);
+
+    // The following example is invalid.
+    // error: coercion from enum '@TypeOf(.enum_literal)' to union 'test_coerce_unions_enum.U2' must initialize 'f32' field 'b'
+    //var u_5: U2 = .b;
+    //try expect(u_5.tag() == 2);
+}
+
+// test```
+
+
+Reference Filename: values.zig
+
+```zig// Top-level declarations are order-independent:
+const print = std.debug.print;
+const std = @import("std");
+const os = std.os;
+const assert = std.debug.assert;
+
+pub fn main() void {
+    // integers
+    const one_plus_one: i32 = 1 + 1;
+    print("1 + 1 = {}\n", .{one_plus_one});
+
+    // floats
+    const seven_div_three: f32 = 7.0 / 3.0;
+    print("7.0 / 3.0 = {}\n", .{seven_div_three});
+
+    // boolean
+    print("{}\n{}\n{}\n", .{
+        true and false,
+        true or false,
+        !true,
+    });
+
+    // optional
+    var optional_value: ?[]const u8 = null;
+    assert(optional_value == null);
+
+    print("\noptional 1\ntype: {}\nvalue: {?s}\n", .{
+        @TypeOf(optional_value), optional_value,
+    });
+
+    optional_value = "hi";
+    assert(optional_value != null);
+
+    print("\noptional 2\ntype: {}\nvalue: {?s}\n", .{
+        @TypeOf(optional_value), optional_value,
+    });
+
+    // error union
+    var number_or_error: anyerror!i32 = error.ArgNotFound;
+
+    print("\nerror union 1\ntype: {}\nvalue: {!}\n", .{
+        @TypeOf(number_or_error),
+        number_or_error,
+    });
+
+    number_or_error = 1234;
+
+    print("\nerror union 2\ntype: {}\nvalue: {!}\n", .{
+        @TypeOf(number_or_error), number_or_error,
+    });
+}
+
+// exe=succeed```
+
+
+Reference Filename: print_comptime-known_format.zig
+
+```zigconst print = @import("std").debug.print;
+
+const a_number: i32 = 1234;
+const a_string = "foobar";
+const fmt = "here is a string: '{s}' here is a number: {}\n";
+
+pub fn main() void {
+    print(fmt, .{ a_string, a_number });
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_container_level_variables.zig
+
+```zigvar y: i32 = add(10, x);
+const x: i32 = add(12, 34);
+
+test "container level variables" {
+    try expect(x == 46);
+    try expect(y == 56);
+}
+
+fn add(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+const std = @import("std");
+const expect = std.testing.expect;
+
+// test```
+
+
+Reference Filename: not_atomic_cmpxchgStrong.zig
+
+```zigfn cmpxchgStrongButNotAtomic(comptime T: type, ptr: *T, expected_value: T, new_value: T) ?T {
+    const old_value = ptr.*;
+    if (old_value == expected_value) {
+        ptr.* = new_value;
+        return null;
+    } else {
+        return old_value;
+    }
+}
+
+// syntax```
+
+
+Reference Filename: export_builtin_equivalent_code.zig
+
+```zigexport fn foo() void {}
+
+// obj```
+
+
+Reference Filename: optional_integer.zig
+
+```zig// normal integer
+const normal_int: i32 = 1234;
+
+// optional integer
+const optional_int: ?i32 = 5678;
+
+// syntax```
+
+
+Reference Filename: testing_skip.zig
+
+```zigtest "this will be skipped" {
+    return error.SkipZigTest;
+}
+
+// test```
+
+
+Reference Filename: test_shuffle_builtin.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "vector @shuffle" {
+    const a = @Vector(7, u8){ 'o', 'l', 'h', 'e', 'r', 'z', 'w' };
+    const b = @Vector(4, u8){ 'w', 'd', '!', 'x' };
+
+    // To shuffle within a single vector, pass undefined as the second argument.
+    // Notice that we can re-order, duplicate, or omit elements of the input vector
+    const mask1 = @Vector(5, i32){ 2, 3, 1, 1, 0 };
+    const res1: @Vector(5, u8) = @shuffle(u8, a, undefined, mask1);
+    try expect(std.mem.eql(u8, &@as([5]u8, res1), "hello"));
+
+    // Combining two vectors
+    const mask2 = @Vector(6, i32){ -1, 0, 4, 1, -2, -3 };
+    const res2: @Vector(6, u8) = @shuffle(u8, a, b, mask2);
+    try expect(std.mem.eql(u8, &@as([6]u8, res2), "world!"));
+}
+
+// test```
+
+
+Reference Filename: test_allowzero.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "allowzero" {
+    var zero: usize = 0; // var to make to runtime-known
+    _ = &zero; // suppress 'var is never mutated' error
+    const ptr: *allowzero i32 = @ptrFromInt(zero);
+    try expect(@intFromPtr(ptr) == 0);
+}
+
+// test```
+
+
+Reference Filename: test_errdefer_capture.zig
+
+```zigconst std = @import("std");
+
+fn captureError(captured: *?anyerror) !void {
+    errdefer |err| {
+        captured.* = err;
+    }
+    return error.GeneralFailure;
+}
+
+test "errdefer capture" {
+    var captured: ?anyerror = null;
+
+    if (captureError(&captured)) unreachable else |err| {
+        try std.testing.expectEqual(error.GeneralFailure, captured.?);
+        try std.testing.expectEqual(error.GeneralFailure, err);
+    }
+}
+
+// test```
+
+
+Reference Filename: test_defer.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+const print = std.debug.print;
+
+fn deferExample() !usize {
+    var a: usize = 1;
+
+    {
+        defer a = 2;
+        a = 1;
+    }
+    try expect(a == 2);
+
+    a = 5;
+    return a;
+}
+
+test "defer basics" {
+    try expect((try deferExample()) == 5);
+}
+
+// test```
+
+
+Reference Filename: test_src_builtin.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "@src" {
+    try doTheTest();
+}
+
+fn doTheTest() !void {
+    const src = @src();
+
+    try expect(src.line == 9);
+    try expect(src.column == 17);
+    try expect(std.mem.endsWith(u8, src.fn_name, "doTheTest"));
+    try expect(std.mem.endsWith(u8, src.file, "test_src_builtin.zig"));
+}
+
+// test```
+
+
+Reference Filename: generic_data_structure.zig
+
+```zigfn List(comptime T: type) type {
+    return struct {
+        items: []T,
+        len: usize,
+    };
+}
+
+// The generic List data structure can be instantiated by passing in a type:
+var buffer: [10]i32 = undefined;
+var list = List(i32){
+    .items = &buffer,
+    .len = 0,
+};
+
+// syntax```
+
+
+Reference Filename: testing_error_with_if.zig
+
+```zigconst print = @import("std").debug.print;
+
+pub fn main() void {
+    const result = getNumberOrFail();
+
+    if (result) |number| {
+        print("got number: {}\n", .{number});
+    } else |err| {
+        print("got error: {s}\n", .{@errorName(err)});
+    }
+}
+
+fn getNumberOrFail() !i32 {
+    return error.UnableToReturnNumber;
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_while.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "while basic" {
+    var i: usize = 0;
+    while (i < 10) {
+        i += 1;
+    }
+    try expect(i == 10);
+}
+
+// test```
+
+
+Reference Filename: test_print_too_many_args.zig
+
+```zigconst print = @import("std").debug.print;
+
+const a_number: i32 = 1234;
+const a_string = "foobar";
+
+test "print too many arguments" {
+    print("here is a string: '{s}' here is a number: {}\n", .{
+        a_string,
+        a_number,
+        a_number,
+    });
+}
+
+// test_error=unused argument in 'here is a string: '{s}' here is a number: {}```
+
+
+Reference Filename: test_static_local_variable.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "static local variable" {
+    try expect(foo() == 1235);
+    try expect(foo() == 1236);
+}
+
+fn foo() i32 {
+    const S = struct {
+        var x: i32 = 1234;
+    };
+    S.x += 1;
+    return S.x;
+}
+
+// test```
+
+
+Reference Filename: math.zig
+
+```zigextern fn print(i32) void;
+
+export fn add(a: i32, b: i32) void {
+    print(a + b);
+}
+
+// exe=succeed
+// target=wasm32-freestanding
+// additional_option=-fno-entry
+// additional_option=--export=add```
+
+
+Reference Filename: test_functions.zig
+
+```zigconst std = @import("std");
+const builtin = @import("builtin");
+const native_arch = builtin.cpu.arch;
+const expect = std.testing.expect;
+
+// Functions are declared like this
+fn add(a: i8, b: i8) i8 {
+    if (a == 0) {
+        return b;
+    }
+
+    return a + b;
+}
+
+// The export specifier makes a function externally visible in the generated
+// object file, and makes it use the C ABI.
+export fn sub(a: i8, b: i8) i8 {
+    return a - b;
+}
+
+// The extern specifier is used to declare a function that will be resolved
+// at link time, when linking statically, or at runtime, when linking
+// dynamically. The quoted identifier after the extern keyword specifies
+// the library that has the function. (e.g. "c" -> libc.so)
+// The callconv specifier changes the calling convention of the function.
+const WINAPI: std.builtin.CallingConvention = if (native_arch == .x86) .Stdcall else .C;
+extern "kernel32" fn ExitProcess(exit_code: u32) callconv(WINAPI) noreturn;
+extern "c" fn atan2(a: f64, b: f64) f64;
+
+// The @branchHint builtin can be used to tell the optimizer that a function is rarely called ("cold").
+fn abort() noreturn {
+    @branchHint(.cold);
+    while (true) {}
+}
+
+// The naked calling convention makes a function not have any function prologue or epilogue.
+// This can be useful when integrating with assembly.
+fn _start() callconv(.naked) noreturn {
+    abort();
+}
+
+// The inline calling convention forces a function to be inlined at all call sites.
+// If the function cannot be inlined, it is a compile-time error.
+inline fn shiftLeftOne(a: u32) u32 {
+    return a << 1;
+}
+
+// The pub specifier allows the function to be visible when importing.
+// Another file can use @import and call sub2
+pub fn sub2(a: i8, b: i8) i8 {
+    return a - b;
+}
+
+// Function pointers are prefixed with `*const `.
+const Call2Op = *const fn (a: i8, b: i8) i8;
+fn doOp(fnCall: Call2Op, op1: i8, op2: i8) i8 {
+    return fnCall(op1, op2);
+}
+
+test "function" {
+    try expect(doOp(add, 5, 6) == 11);
+    try expect(doOp(sub2, 5, 6) == -1);
+}
+
+// test```
+
+
+Reference Filename: mutable_var.zig
+
+```zigconst print = @import("std").debug.print;
+
+pub fn main() void {
+    var y: i32 = 5678;
+
+    y += 1;
+
+    print("{d}", .{y});
+}
+
+// exe=succeed```
+
+
+Reference Filename: destructuring_return_value.zig
+
+```zigconst print = @import("std").debug.print;
+
+fn divmod(numerator: u32, denominator: u32) struct { u32, u32 } {
+    return .{ numerator / denominator, numerator % denominator };
+}
+
+pub fn main() void {
+    const div, const mod = divmod(10, 3);
+
+    print("10 / 3 = {}\n", .{div});
+    print("10 % 3 = {}\n", .{mod});
+}
+
+// exe=succeed```
+
+
+Reference Filename: print.zig
+
+```zigconst print = @import("std").debug.print;
+
+const a_number: i32 = 1234;
+const a_string = "foobar";
+
+pub fn main() void {
+    print("here is a string: '{s}' here is a number: {}\n", .{ a_string, a_number });
+}
+
+// exe=succeed```
+
+
+Reference Filename: runtime_wrong_union_field_access.zig
+
+```zigconst std = @import("std");
+
+const Foo = union {
+    float: f32,
+    int: u32,
+};
+
+pub fn main() void {
+    var f = Foo{ .int = 42 };
+    bar(&f);
+}
+
+fn bar(f: *Foo) void {
+    f.float = 12.34;
+    std.debug.print("value: {}\n", .{f.float});
+}
+
+// exe=fail```
+
+
+Reference Filename: test_incorrect_pointer_alignment.zig
+
+```zigconst std = @import("std");
+
+test "pointer alignment safety" {
+    var array align(4) = [_]u32{ 0x11111111, 0x11111111 };
+    const bytes = std.mem.sliceAsBytes(array[0..]);
+    try std.testing.expect(foo(bytes) == 0x11111111);
+}
+fn foo(bytes: []u8) u32 {
+    const slice4 = bytes[1..5];
+    const int_slice = std.mem.bytesAsSlice(u32, @as([]align(4) u8, @alignCast(slice4)));
+    return int_slice[0];
+}
+
+// test_safety=incorrect alignment```
+
+
+Reference Filename: runtime_reaching_unreachable.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    std.debug.assert(false);
+}
+
+// exe=fail```
+
+
+Reference Filename: test_volatile.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "volatile" {
+    const mmio_ptr: *volatile u8 = @ptrFromInt(0x12345678);
+    try expect(@TypeOf(mmio_ptr) == *volatile u8);
+}
+
+// test```
+
+
+Reference Filename: TopLevelFields.zig
+
+```zig//! Because this file contains fields, it is a type which is intended to be instantiated, and so
+//! is named in TitleCase instead of snake_case by convention.
+
+foo: u32,
+bar: u64,
+
+/// `@This()` can be used to refer to this struct type. In files with fields, it is quite common to
+/// name the type here, so it can be easily referenced by other declarations in this file.
+const TopLevelFields = @This();
+
+pub fn init(val: u32) TopLevelFields {
+    return .{
+        .foo = val,
+        .bar = val * 10,
+    };
+}
+
+// syntax```
+
+
+Reference Filename: build.zig
+
+```zigconst std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const optimize = b.standardOptimizeOption(.{});
+    const exe = b.addExecutable(.{
+        .name = "example",
+        .root_source_file = b.path("example.zig"),
+        .optimize = optimize,
+    });
+    b.default_step.dependOn(&exe.step);
+}
+
+// syntax```
+
+
+Reference Filename: error_return_trace.zig
+
+```zigpub fn main() !void {
+    try foo(12);
+}
+
+fn foo(x: i32) !void {
+    if (x >= 5) {
+        try bar();
+    } else {
+        try bang2();
+    }
+}
+
+fn bar() !void {
+    if (baz()) {
+        try quux();
+    } else |err| switch (err) {
+        error.FileNotFound => try hello(),
+    }
+}
+
+fn baz() !void {
+    try bang1();
+}
+
+fn quux() !void {
+    try bang2();
+}
+
+fn hello() !void {
+    try bang2();
+}
+
+fn bang1() !void {
+    return error.FileNotFound;
+}
+
+fn bang2() !void {
+    return error.PermissionDenied;
+}
+
+// exe=fail```
+
+
+Reference Filename: struct_default_field_values.zig
+
+```zigconst Foo = struct {
+    a: i32 = 1234,
+    b: i32,
+};
+
+test "default struct initialization fields" {
+    const x: Foo = .{
+        .b = 5,
+    };
+    if (x.a + x.b != 1239) {
+        comptime unreachable;
+    }
+}
+
+// test```
+
+
+Reference Filename: test_unresolved_comptime_value.zig
+
+```zigfn max(comptime T: type, a: T, b: T) T {
+    return if (a > b) a else b;
+}
+test "try to pass a runtime type" {
+    foo(false);
+}
+fn foo(condition: bool) void {
+    const result = max(if (condition) f32 else u64, 1234, 5678);
+    _ = result;
+}
+
+// test_error=unable to resolve comptime value```
+
+
+Reference Filename: test_comptime_pointer_conversion.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "comptime @ptrFromInt" {
+    comptime {
+        // Zig is able to do this at compile-time, as long as
+        // ptr is never dereferenced.
+        const ptr: *i32 = @ptrFromInt(0xdeadbee0);
+        const addr = @intFromPtr(ptr);
+        try expect(@TypeOf(addr) == usize);
+        try expect(addr == 0xdeadbee0);
+    }
+}
+
+// test```
+
+
+Reference Filename: float_mode_obj.zig
+
+```zigconst std = @import("std");
+const big = @as(f64, 1 << 40);
+
+export fn foo_strict(x: f64) f64 {
+    return x + big - big;
+}
+
+export fn foo_optimized(x: f64) f64 {
+    @setFloatMode(.optimized);
+    return x + big - big;
+}
+
+// obj
+// optimize=ReleaseFast
+// disable_cache```
+
+
+Reference Filename: test_comptime_reaching_unreachable.zig
+
+```zigcomptime {
+    assert(false);
+}
+fn assert(ok: bool) void {
+    if (!ok) unreachable; // assertion failure
+}
+
+// test_error=reached unreachable code```
+
+
+Reference Filename: test_while_nested_break.zig
+
+```zigtest "nested break" {
+    outer: while (true) {
+        while (true) {
+            break :outer;
+        }
+    }
+}
+
+test "nested continue" {
+    var i: usize = 0;
+    outer: while (i < 10) : (i += 1) {
+        while (true) {
+            continue :outer;
+        }
+    }
+}
+
+// test```
+
+
+Reference Filename: test_missized_packed_struct.zig
+
+```zigtest "missized packed struct" {
+    const S = packed struct(u32) { a: u16, b: u8 };
+    _ = S{ .a = 4, .b = 2 };
+}
+
+// test_error=backing integer type 'u32' has bit size 32 but the struct fields have a total bit size of 24```
+
+
+Reference Filename: export_any_symbol_name.zig
+
+```zigexport fn @"A function name that is a complete sentence."() void {}
+
+// obj```
+
+
+Reference Filename: test_comptime_wrong_union_field_access.zig
+
+```zigcomptime {
+    var f = Foo{ .int = 42 };
+    f.float = 12.34;
+}
+
+const Foo = union {
+    float: f32,
+    int: u32,
+};
+
+// test_error=access of union field 'float' while field 'int' is active```
+
+
+Reference Filename: test_null_terminated_slice.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "0-terminated slice" {
+    const slice: [:0]const u8 = "hello";
+
+    try expect(slice.len == 5);
+    try expect(slice[5] == 0);
+}
+
+// test```
+
+
+Reference Filename: test_coerce_tuples_arrays.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const Tuple = struct { u8, u8 };
+test "coercion from homogeneous tuple to array" {
+    const tuple: Tuple = .{ 5, 6 };
+    const array: [2]u8 = tuple;
+    _ = array;
+}
+
+// test```
+
+
+Reference Filename: test_splat_builtin.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "vector @splat" {
+    const scalar: u32 = 5;
+    const result: @Vector(4, u32) = @splat(scalar);
+    try expect(std.mem.eql(u32, &@as([4]u32, result), &[_]u32{ 5, 5, 5, 5 }));
+}
+
+test "array @splat" {
+    const scalar: u32 = 5;
+    const result: [4]u32 = @splat(scalar);
+    try expect(std.mem.eql(u32, &@as([4]u32, result), &[_]u32{ 5, 5, 5, 5 }));
+}
+
+// test```
+
+
+Reference Filename: runtime_invalid_null_pointer_cast.zig
+
+```zigpub fn main() void {
+    var opt_ptr: ?*i32 = null;
+    _ = &opt_ptr;
+    const ptr: *i32 = @ptrCast(opt_ptr);
+    _ = ptr;
+}
+
+// exe=fail```
+
+
+Reference Filename: test_thread_local_variables.zig
+
+```zigconst std = @import("std");
+const assert = std.debug.assert;
+
+threadlocal var x: i32 = 1234;
+
+test "thread local storage" {
+    const thread1 = try std.Thread.spawn(.{}, testTls, .{});
+    const thread2 = try std.Thread.spawn(.{}, testTls, .{});
+    testTls();
+    thread1.join();
+    thread2.join();
+}
+
+fn testTls() void {
+    assert(x == 1234);
+    x += 1;
+    assert(x == 1235);
+}
+
+// test```
+
+
+Reference Filename: destructuring_to_existing.zig
+
+```zigconst print = @import("std").debug.print;
+
+pub fn main() void {
+    var x: u32 = undefined;
+    var y: u32 = undefined;
+    var z: u32 = undefined;
+
+    const tuple = .{ 1, 2, 3 };
+
+    x, y, z = tuple;
+
+    print("tuple: x = {}, y = {}, z = {}\n", .{x, y, z});
+
+    const array = [_]u32{ 4, 5, 6 };
+
+    x, y, z = array;
+
+    print("array: x = {}, y = {}, z = {}\n", .{x, y, z});
+
+    const vector: @Vector(3, u32) = .{ 7, 8, 9 };
+
+    x, y, z = vector;
+
+    print("vector: x = {}, y = {}, z = {}\n", .{x, y, z});
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_comptime_unreachable.zig
+
+```zigconst assert = @import("std").debug.assert;
+
+test "type of unreachable" {
+    comptime {
+        // The type of unreachable is noreturn.
+
+        // However this assertion will still fail to compile because
+        // unreachable expressions are compile errors.
+
+        assert(@TypeOf(unreachable) == noreturn);
+    }
+}
+
+// test_error=unreachable code```
+
+
+Reference Filename: test_while_continue_expression.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "while loop continue expression" {
+    var i: usize = 0;
+    while (i < 10) : (i += 1) {}
+    try expect(i == 10);
+}
+
+test "while loop continue expression, more complicated" {
+    var i: usize = 1;
+    var j: usize = 1;
+    while (i * j < 2000) : ({
+        i *= 2;
+        j *= 3;
+    }) {
+        const my_ij = i * j;
+        try expect(my_ij < 2000);
+    }
+}
+
+// test```
+
+
+Reference Filename: inline_call.zig
+
+```zigtest "inline function call" {
+    if (foo(1200, 34) != 1234) {
+        @compileError("bad");
+    }
+}
+
+inline fn foo(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+// test```
+
+
+Reference Filename: runtime_invalid_cast.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    var value: i32 = -1; // runtime-known
+    _ = &value;
+    const unsigned: u32 = @intCast(value);
+    std.debug.print("value: {}\n", .{unsigned});
+}
+
+// exe=fail```
+
+
+Reference Filename: struct_name.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    const Foo = struct {};
+    std.debug.print("variable: {s}\n", .{@typeName(Foo)});
+    std.debug.print("anonymous: {s}\n", .{@typeName(struct {})});
+    std.debug.print("function: {s}\n", .{@typeName(List(i32))});
+}
+
+fn List(comptime T: type) type {
+    return struct {
+        x: T,
+    };
+}
+
+// exe=succeed```
+
+
+Reference Filename: runtime_overflow.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    var byte: u8 = 255;
+    byte += 1;
+    std.debug.print("value: {}\n", .{byte});
+}
+
+// exe=fail```
+
+
+Reference Filename: cli_allocation.zig
+
+```zigconst std = @import("std");
+
+pub fn main() !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+
+    const allocator = arena.allocator();
+
+    const ptr = try allocator.create(i32);
+    std.debug.print("ptr={*}\n", .{ptr});
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_switch.zig
+
+```zigconst std = @import("std");
+const builtin = @import("builtin");
+const expect = std.testing.expect;
+
+test "switch simple" {
+    const a: u64 = 10;
+    const zz: u64 = 103;
+
+    // All branches of a switch expression must be able to be coerced to a
+    // common type.
+    //
+    // Branches cannot fallthrough. If fallthrough behavior is desired, combine
+    // the cases and use an if.
+    const b = switch (a) {
+        // Multiple cases can be combined via a ','
+        1, 2, 3 => 0,
+
+        // Ranges can be specified using the ... syntax. These are inclusive
+        // of both ends.
+        5...100 => 1,
+
+        // Branches can be arbitrarily complex.
+        101 => blk: {
+            const c: u64 = 5;
+            break :blk c * 2 + 1;
+        },
+
+        // Switching on arbitrary expressions is allowed as long as the
+        // expression is known at compile-time.
+        zz => zz,
+        blk: {
+            const d: u32 = 5;
+            const e: u32 = 100;
+            break :blk d + e;
+        } => 107,
+
+        // The else branch catches everything not already captured.
+        // Else branches are mandatory unless the entire range of values
+        // is handled.
+        else => 9,
+    };
+
+    try expect(b == 1);
+}
+
+// Switch expressions can be used outside a function:
+const os_msg = switch (builtin.target.os.tag) {
+    .linux => "we found a linux user",
+    else => "not a linux user",
+};
+
+// Inside a function, switch statements implicitly are compile-time
+// evaluated if the target expression is compile-time known.
+test "switch inside function" {
+    switch (builtin.target.os.tag) {
+        .fuchsia => {
+            // On an OS other than fuchsia, block is not even analyzed,
+            // so this compile error is not triggered.
+            // On fuchsia this compile error would be triggered.
+            @compileError("fuchsia not supported");
+        },
+        else => {},
+    }
+}
+
+// test```
+
+
+Reference Filename: test_coerce_optional_wrapped_error_union.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "coerce to optionals wrapped in error union" {
+    const x: anyerror!?i32 = 1234;
+    const y: anyerror!?i32 = null;
+
+    try expect((try x).? == 1234);
+    try expect((try y) == null);
+}
+
+// test```
+
+
+Reference Filename: test_fn_reflection.zig
+
+```zigconst std = @import("std");
+const math = std.math;
+const testing = std.testing;
+
+test "fn reflection" {
+    try testing.expect(@typeInfo(@TypeOf(testing.expect)).@"fn".params[0].type.? == bool);
+    try testing.expect(@typeInfo(@TypeOf(testing.tmpDir)).@"fn".return_type.? == testing.TmpDir);
+
+    try testing.expect(@typeInfo(@TypeOf(math.Log2Int)).@"fn".is_generic);
+}
+
+// test```
+
+
+Reference Filename: test_TypeOf_builtin.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "no runtime side effects" {
+    var data: i32 = 0;
+    const T = @TypeOf(foo(i32, &data));
+    try comptime expect(T == i32);
+    try expect(data == 0);
+}
+
+fn foo(comptime T: type, ptr: *T) T {
+    ptr.* += 1;
+    return ptr.*;
+}
+
+// test```
+
+
+Reference Filename: test_comptime_invalid_error_code.zig
+
+```zigcomptime {
+    const err = error.AnError;
+    const number = @intFromError(err) + 10;
+    const invalid_err = @errorFromInt(number);
+    _ = invalid_err;
+}
+
+// test_error=integer value '11' represents no error```
+
+
+Reference Filename: enum_export_error.zig
+
+```zigconst Foo = enum { a, b, c };
+export fn entry(foo: Foo) void {
+    _ = foo;
+}
+
+// obj=parameter of type 'enum_export_error.Foo' not allowed in function with calling convention 'x86_64_sysv'
+// target=x86_64-linux```
+
+
+Reference Filename: test_comptime_incorrect_pointer_alignment.zig
+
+```zigcomptime {
+    const ptr: *align(1) i32 = @ptrFromInt(0x1);
+    const aligned: *align(4) i32 = @alignCast(ptr);
+    _ = aligned;
+}
+
+// test_error=pointer address 0x1 is not aligned to 4 bytes```
+
+
+Reference Filename: test_misaligned_pointer.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const BitField = packed struct {
+    a: u3,
+    b: u3,
+    c: u2,
+};
+
+var bit_field = BitField{
+    .a = 1,
+    .b = 2,
+    .c = 3,
+};
+
+test "pointer to non-byte-aligned field" {
+    try expect(bar(&bit_field.b) == 2);
+}
+
+fn bar(x: *const u3) u3 {
+    return x.*;
+}
+
+// test_error=expected type```
+
+
+Reference Filename: packed_struct_mmio.zig
+
+```zigpub const GpioRegister = packed struct(u8) {
+    GPIO0: bool,
+    GPIO1: bool,
+    GPIO2: bool,
+    GPIO3: bool,
+    reserved: u4 = 0,
+};
+
+const gpio: *volatile GpioRegister = @ptrFromInt(0x0123);
+
+pub fn writeToGpio(new_states: GpioRegister) void {
+    // Example of what not to do:
+    // BAD! gpio.GPIO0 = true; BAD!
+
+    // Instead, do this:
+    gpio.* = new_states;
+}
+
+// syntax```
+
+
+Reference Filename: testing_detect_test.zig
+
+```zigconst std = @import("std");
+const builtin = @import("builtin");
+const expect = std.testing.expect;
+
+test "builtin.is_test" {
+    try expect(isATest());
+}
+
+fn isATest() bool {
+    return builtin.is_test;
+}
+
+// test```
+
+
+Reference Filename: test_unhandled_enumeration_value.zig
+
+```zigconst Color = enum {
+    auto,
+    off,
+    on,
+};
+
+test "exhaustive switching" {
+    const color = Color.off;
+    switch (color) {
+        Color.auto => {},
+        Color.on => {},
+    }
+}
+
+// test_error=unhandled enumeration value```
+
+
+Reference Filename: test_inline_switch.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+const expectError = std.testing.expectError;
+
+fn isFieldOptional(comptime T: type, field_index: usize) !bool {
+    const fields = @typeInfo(T).@"struct".fields;
+    return switch (field_index) {
+        // This prong is analyzed twice with `idx` being a
+        // comptime-known value each time.
+        inline 0, 1 => |idx| @typeInfo(fields[idx].type) == .optional,
+        else => return error.IndexOutOfBounds,
+    };
+}
+
+const Struct1 = struct { a: u32, b: ?u32 };
+
+test "using @typeInfo with runtime values" {
+    var index: usize = 0;
+    try expect(!try isFieldOptional(Struct1, index));
+    index += 1;
+    try expect(try isFieldOptional(Struct1, index));
+    index += 1;
+    try expectError(error.IndexOutOfBounds, isFieldOptional(Struct1, index));
+}
+
+// Calls to `isFieldOptional` on `Struct1` get unrolled to an equivalent
+// of this function:
+fn isFieldOptionalUnrolled(field_index: usize) !bool {
+    return switch (field_index) {
+        0 => false,
+        1 => true,
+        else => return error.IndexOutOfBounds,
+    };
+}
+
+// test```
+
+
+Reference Filename: test_type_coercion.zig
+
+```zigtest "type coercion - variable declaration" {
+    const a: u8 = 1;
+    const b: u16 = a;
+    _ = b;
+}
+
+test "type coercion - function call" {
+    const a: u8 = 1;
+    foo(a);
+}
+
+fn foo(b: u16) void {
+    _ = b;
+}
+
+test "type coercion - @as builtin" {
+    const a: u8 = 1;
+    const b = @as(u16, a);
+    _ = b;
+}
+
+// test```
+
+
+Reference Filename: wasi_args.zig
+
+```zigconst std = @import("std");
+
+pub fn main() !void {
+    var general_purpose_allocator: std.heap.GeneralPurposeAllocator(.{}) = .init;
+    const gpa = general_purpose_allocator.allocator();
+    const args = try std.process.argsAlloc(gpa);
+    defer std.process.argsFree(gpa, args);
+
+    for (args, 0..) |arg, i| {
+        std.debug.print("{}: {s}\n", .{ i, arg });
+    }
+}
+
+// exe=succeed
+// target=wasm32-wasi```
+
+
+Reference Filename: math_add.zig
+
+```zigconst math = @import("std").math;
+const print = @import("std").debug.print;
+pub fn main() !void {
+    var byte: u8 = 255;
+
+    byte = if (math.add(u8, byte, 1)) |result| result else |err| {
+        print("unable to add one: {s}\n", .{@errorName(err)});
+        return err;
+    };
+
+    print("result: {}\n", .{byte});
+}
+
+// exe=fail```
+
+
+Reference Filename: test_inline_switch_union_tag.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const U = union(enum) {
+    a: u32,
+    b: f32,
+};
+
+fn getNum(u: U) u32 {
+    switch (u) {
+        // Here `num` is a runtime-known value that is either
+        // `u.a` or `u.b` and `tag` is `u`'s comptime-known tag value.
+        inline else => |num, tag| {
+            if (tag == .b) {
+                return @intFromFloat(num);
+            }
+            return num;
+        },
+    }
+}
+
+test "test" {
+    const u = U{ .b = 42 };
+    try expect(getNum(u) == 42);
+}
+
+// test```
+
+
+Reference Filename: test_empty_block.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test {
+    const a = {};
+    const b = void{};
+    try expect(@TypeOf(a) == void);
+    try expect(@TypeOf(b) == void);
+    try expect(a == b);
+}
+
+// test```
+
+
+Reference Filename: test_coerce_large_to_small.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+test "coercing large integer type to smaller one when value is comptime-known to fit" {
+    const x: u64 = 255;
+    const y: u8 = x;
+    try expect(y == 255);
+}
+
+// test```
+
+
+Reference Filename: runtime_unwrap_null.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    var optional_number: ?i32 = null;
+    _ = &optional_number;
+    const number = optional_number.?;
+    std.debug.print("value: {}\n", .{number});
+}
+
+// exe=fail```
+
+
+Reference Filename: test_enum_literals.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const Color = enum {
+    auto,
+    off,
+    on,
+};
+
+test "enum literals" {
+    const color1: Color = .auto;
+    const color2 = Color.auto;
+    try expect(color1 == color2);
+}
+
+test "switch using enum literals" {
+    const color = Color.on;
+    const result = switch (color) {
+        .auto => false,
+        .on => true,
+        .off => false,
+    };
+    try expect(result);
+}
+
+// test```
+
+
+Reference Filename: assign_undefined.zig
+
+```zigconst print = @import("std").debug.print;
+
+pub fn main() void {
+    var x: i32 = undefined;
+    x = 1;
+    print("{d}", .{x});
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_union_method.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const Variant = union(enum) {
+    int: i32,
+    boolean: bool,
+
+    // void can be omitted when inferring enum tag type.
+    none,
+
+    fn truthy(self: Variant) bool {
+        return switch (self) {
+            Variant.int => |x_int| x_int != 0,
+            Variant.boolean => |x_bool| x_bool,
+            Variant.none => false,
+        };
+    }
+};
+
+test "union method" {
+    var v1: Variant = .{ .int = 1 };
+    var v2: Variant = .{ .boolean = false };
+    var v3: Variant = .none;
+
+    try expect(v1.truthy());
+    try expect(!v2.truthy());
+    try expect(!v3.truthy());
+}
+
+// test```
+
+
+Reference Filename: test_tagName.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const Small2 = union(enum) {
+    a: i32,
+    b: bool,
+    c: u8,
+};
+test "@tagName" {
+    try expect(std.mem.eql(u8, @tagName(Small2.a), "a"));
+}
+
+// test```
+
+
+Reference Filename: test_field_builtin.zig
+
+```zigconst std = @import("std");
+
+const Point = struct {
+    x: u32,
+    y: u32,
+
+    pub var z: u32 = 1;
+};
+
+test "field access by string" {
+    const expect = std.testing.expect;
+    var p = Point{ .x = 0, .y = 0 };
+
+    @field(p, "x") = 4;
+    @field(p, "y") = @field(p, "x") + 1;
+
+    try expect(@field(p, "x") == 4);
+    try expect(@field(p, "y") == 5);
+}
+
+test "decl access by string" {
+    const expect = std.testing.expect;
+
+    try expect(@field(Point, "z") == 1);
+
+    @field(Point, "z") = 2;
+    try expect(@field(Point, "z") == 2);
+}
+
+// test```
+
+
+Reference Filename: runtime_invalid_enum_cast.zig
+
+```zigconst std = @import("std");
+
+const Foo = enum {
+    a,
+    b,
+    c,
+};
+
+pub fn main() void {
+    var a: u2 = 3;
+    _ = &a;
+    const b: Foo = @enumFromInt(a);
+    std.debug.print("value: {s}\n", .{@tagName(b)});
+}
+
+// exe=fail```
+
+
+Reference Filename: test_comptime_shlExact_overwlow.zig
+
+```zigcomptime {
+    const x = @shlExact(@as(u8, 0b01010101), 2);
+    _ = x;
+}
+
+// test_error=operation caused overflow```
+
+
+Reference Filename: builtin.CallModifier struct.zig
+
+```zigpub const CallModifier = enum {
+    /// Equivalent to function call syntax.
+    auto,
+
+    /// Equivalent to async keyword used with function call syntax.
+    async_kw,
+
+    /// Prevents tail call optimization. This guarantees that the return
+    /// address will point to the callsite, as opposed to the callsite's
+    /// callsite. If the call is otherwise required to be tail-called
+    /// or inlined, a compile error is emitted instead.
+    never_tail,
+
+    /// Guarantees that the call will not be inlined. If the call is
+    /// otherwise required to be inlined, a compile error is emitted instead.
+    never_inline,
+
+    /// Asserts that the function call will not suspend. This allows a
+    /// non-async function to call an async function.
+    no_async,
+
+    /// Guarantees that the call will be generated with tail call optimization.
+    /// If this is not possible, a compile error is emitted instead.
+    always_tail,
+
+    /// Guarantees that the call will be inlined at the callsite.
+    /// If this is not possible, a compile error is emitted instead.
+    always_inline,
+
+    /// Evaluates the call at compile-time. If the call cannot be completed at
+    /// compile-time, a compile error is emitted instead.
+    compile_time,
+};
+
+// syntax```
+
+
+Reference Filename: undefined_active_union_field.zig
+
+```zigconst std = @import("std");
+
+const Foo = union {
+    float: f32,
+    int: u32,
+};
+
+pub fn main() void {
+    var f = Foo{ .int = 42 };
+    f = Foo{ .float = undefined };
+    bar(&f);
+    std.debug.print("value: {}\n", .{f.float});
+}
+
+fn bar(f: *Foo) void {
+    f.float = 12.34;
+}
+
+// exe=succeed```
+
+
+Reference Filename: test_comptime_divExact_remainder.zig
+
+```zigcomptime {
+    const a: u32 = 10;
+    const b: u32 = 3;
+    const c = @divExact(a, b);
+    _ = c;
+}
+
+// test_error=exact division produced remainder```
+
+
+Reference Filename: var_must_be_initialized.zig
+
+```zigpub fn main() void {
+    var x: i32;
+
+    x = 1;
+}
+
+// exe=build_fail```
+
+
+Reference Filename: runtime_shlExact_overflow.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    var x: u8 = 0b01010101; // runtime-known
+    _ = &x;
+    const y = @shlExact(x, 2);
+    std.debug.print("value: {}\n", .{y});
+}
+
+// exe=fail```
+
+
+Reference Filename: test_integer_widening.zig
+
+```zigconst std = @import("std");
+const builtin = @import("builtin");
+const expect = std.testing.expect;
+const mem = std.mem;
+
+test "integer widening" {
+    const a: u8 = 250;
+    const b: u16 = a;
+    const c: u32 = b;
+    const d: u64 = c;
+    const e: u64 = d;
+    const f: u128 = e;
+    try expect(f == a);
+}
+
+test "implicit unsigned integer to signed integer" {
+    const a: u8 = 250;
+    const b: i16 = a;
+    try expect(b == 250);
+}
+
+test "float widening" {
+    const a: f16 = 12.34;
+    const b: f32 = a;
+    const c: f64 = b;
+    const d: f128 = c;
+    try expect(d == a);
+}
+
+// test```
+
+
+Reference Filename: test_illegal_behavior.zig
+
+```zigtest "safety check" {
+    unreachable;
+}
+
+// test_error=reached unreachable code```
+
+
+Reference Filename: test_while_error_capture.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "while error union capture" {
+    var sum1: u32 = 0;
+    numbers_left = 3;
+    while (eventuallyErrorSequence()) |value| {
+        sum1 += value;
+    } else |err| {
+        try expect(err == error.ReachedZero);
+    }
+}
+
+var numbers_left: u32 = undefined;
+
+fn eventuallyErrorSequence() anyerror!u32 {
+    return if (numbers_left == 0) error.ReachedZero else blk: {
+        numbers_left -= 1;
+        break :blk numbers_left;
+    };
+}
+
+// test```
+
+
+Reference Filename: catch_err_return.zig
+
+```zigconst parseU64 = @import("error_union_parsing_u64.zig").parseU64;
+
+fn doAThing(str: []u8) !void {
+    const number = parseU64(str, 10) catch |err| return err;
+    _ = number; // ...
+}
+
+// syntax```
+
+
+Reference Filename: runtime_unwrap_error.zig
+
+```zigconst std = @import("std");
+
+pub fn main() void {
+    const number = getNumberOrFail() catch unreachable;
+    std.debug.print("value: {}\n", .{number});
+}
+
+fn getNumberOrFail() !i32 {
+    return error.UnableToReturnNumber;
+}
+
+// exe=fail```
+
+
+Reference Filename: test_struct_result.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const Point = struct { x: i32, y: i32 };
+
+test "anonymous struct literal" {
+    const pt: Point = .{
+        .x = 13,
+        .y = 67,
+    };
+    try expect(pt.x == 13);
+    try expect(pt.y == 67);
+}
+
+// test```
+
+
+Reference Filename: test_coerce_slices_arrays_and_pointers.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+// You can assign constant pointers to arrays to a slice with
+// const modifier on the element type. Useful in particular for
+// String literals.
+test "*const [N]T to []const T" {
+    const x1: []const u8 = "hello";
+    const x2: []const u8 = &[5]u8{ 'h', 'e', 'l', 'l', 111 };
+    try expect(std.mem.eql(u8, x1, x2));
+
+    const y: []const f32 = &[2]f32{ 1.2, 3.4 };
+    try expect(y[0] == 1.2);
+}
+
+// Likewise, it works when the destination type is an error union.
+test "*const [N]T to E![]const T" {
+    const x1: anyerror![]const u8 = "hello";
+    const x2: anyerror![]const u8 = &[5]u8{ 'h', 'e', 'l', 'l', 111 };
+    try expect(std.mem.eql(u8, try x1, try x2));
+
+    const y: anyerror![]const f32 = &[2]f32{ 1.2, 3.4 };
+    try expect((try y)[0] == 1.2);
+}
+
+// Likewise, it works when the destination type is an optional.
+test "*const [N]T to ?[]const T" {
+    const x1: ?[]const u8 = "hello";
+    const x2: ?[]const u8 = &[5]u8{ 'h', 'e', 'l', 'l', 111 };
+    try expect(std.mem.eql(u8, x1.?, x2.?));
+
+    const y: ?[]const f32 = &[2]f32{ 1.2, 3.4 };
+    try expect(y.?[0] == 1.2);
+}
+
+// In this cast, the array length becomes the slice length.
+test "*[N]T to []T" {
+    var buf: [5]u8 = "hello".*;
+    const x: []u8 = &buf;
+    try expect(std.mem.eql(u8, x, "hello"));
+
+    const buf2 = [2]f32{ 1.2, 3.4 };
+    const x2: []const f32 = &buf2;
+    try expect(std.mem.eql(f32, x2, &[2]f32{ 1.2, 3.4 }));
+}
+
+// Single-item pointers to arrays can be coerced to many-item pointers.
+test "*[N]T to [*]T" {
+    var buf: [5]u8 = "hello".*;
+    const x: [*]u8 = &buf;
+    try expect(x[4] == 'o');
+    // x[5] would be an uncaught out of bounds pointer dereference!
+}
+
+// Likewise, it works when the destination type is an optional.
+test "*[N]T to ?[*]T" {
+    var buf: [5]u8 = "hello".*;
+    const x: ?[*]u8 = &buf;
+    try expect(x.?[4] == 'o');
+}
+
+// Single-item pointers can be cast to len-1 single-item arrays.
+test "*T to *[1]T" {
+    var x: i32 = 1234;
+    const y: *[1]i32 = &x;
+    const z: [*]i32 = y;
+    try expect(z[0] == 1234);
+}
+
+// test```
+
+
+Reference Filename: test_switch_modify_tagged_union.zig
+
+```zigconst std = @import("std");
+const expect = std.testing.expect;
+
+const ComplexTypeTag = enum {
+    ok,
+    not_ok,
+};
+const ComplexType = union(ComplexTypeTag) {
+    ok: u8,
+    not_ok: void,
+};
+
+test "modify tagged union in switch" {
+    var c = ComplexType{ .ok = 42 };
+
+    switch (c) {
+        ComplexTypeTag.ok => |*value| value.* += 1,
+        ComplexTypeTag.not_ok => unreachable,
+    }
+
+    try expect(c.ok == 43);
+}
+
+// test```
+
+
+Reference Filename: test_coerce_error_subset_to_superset.zig
+
+```zigconst std = @import("std");
+
+const FileOpenError = error{
+    AccessDenied,
+    OutOfMemory,
+    FileNotFound,
+};
+
+const AllocationError = error{
+    OutOfMemory,
+};
+
+test "coerce subset to superset" {
+    const err = foo(AllocationError.OutOfMemory);
+    try std.testing.expect(err == FileOpenError.OutOfMemory);
+}
+
+fn foo(err: AllocationError) FileOpenError {
+    return err;
+}
+
+// test```
+
+
+Reference Filename: testing_detect_leak.zig
+
+```zigconst std = @import("std");
+
+test "detect leak" {
+    var list = std.ArrayList(u21).init(std.testing.allocator);
+    // missing `defer list.deinit();`
+    try list.append('☔');
+
+    try std.testing.expect(list.items.len == 1);
+}
+
+// test_error=1 tests leaked memory```
+
+
+Reference Filename: test_for.zig
+
+```zigconst expect = @import("std").testing.expect;
+
+test "for basics" {
+    const items = [_]i32{ 4, 5, 3, 4, 0 };
+    var sum: i32 = 0;
+
+    // For loops iterate over slices and arrays.
+    for (items) |value| {
+        // Break and continue are supported.
+        if (value == 0) {
+            continue;
+        }
+        sum += value;
+    }
+    try expect(sum == 16);
+
+    // To iterate over a portion of a slice, reslice.
+    for (items[0..1]) |value| {
+        sum += value;
+    }
+    try expect(sum == 20);
+
+    // To access the index of iteration, specify a second condition as well
+    // as a second capture value.
+    var sum2: i32 = 0;
+    for (items, 0..) |_, i| {
+        try expect(@TypeOf(i) == usize);
+        sum2 += @as(i32, @intCast(i));
+    }
+    try expect(sum2 == 10);
+
+    // To iterate over consecutive integers, use the range syntax.
+    // Unbounded range is always a compile error.
+    var sum3: usize = 0;
+    for (0..5) |i| {
+        sum3 += i;
+    }
+    try expect(sum3 == 10);
+}
+
+test "multi object for" {
+    const items = [_]usize{ 1, 2, 3 };
+    const items2 = [_]usize{ 4, 5, 6 };
+    var count: usize = 0;
+
+    // Iterate over multiple objects.
+    // All lengths must be equal at the start of the loop, otherwise detectable
+    // illegal behavior occurs.
+    for (items, items2) |i, j| {
+        count += i + j;
+    }
+
+    try expect(count == 21);
+}
+
+test "for reference" {
+    var items = [_]i32{ 3, 4, 2 };
+
+    // Iterate over the slice by reference by
+    // specifying that the capture value is a pointer.
+    for (&items) |*value| {
+        value.* += 1;
+    }
+
+    try expect(items[0] == 4);
+    try expect(items[1] == 5);
+    try expect(items[2] == 3);
+}
+
+test "for else" {
+    // For allows an else attached to it, the same as a while loop.
+    const items = [_]?i32{ 3, 4, null, 5 };
+
+    // For loops can also be used as expressions.
+    // Similar to while loops, when you break from a for loop, the else branch is not evaluated.
+    var sum: i32 = 0;
+    const result = for (items) |value| {
+        if (value != null) {
+            sum += value.?;
+        }
+    } else blk: {
+        try expect(sum == 12);
+        break :blk sum;
+    };
+    try expect(result == 12);
+}
+
+// test```
+
+

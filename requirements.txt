@@ -1,0 +1,13 @@
+torch>=2.1.0
+transformers>=4.39.0
+peft>=0.8.2
+datasets>=2.18.0
+accelerate>=0.23.0
+bitsandbytes>=0.42.0
+scipy
+sentencepiece
+protobuf
+trl
+unsloth
+vllm[all]
+numpy

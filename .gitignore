@@ -1,0 +1,5 @@
+qwen3-zig-lora
+.aider*
+unsloth_compiled_cache
+raw_data/zig
+raw_data/zig-cookbook
